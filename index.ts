@@ -8,6 +8,7 @@ const PROFILE_UUID = "cf0499b7-45a6-4e2c-9150-ae32ec8a2b66";
 
 interface DataFile {
   lastTransactionTimestamp?: number;
+  balance?: number;
   users?: Record<Username, number>;
   transactions?: LocalTransaction[];
 }
@@ -94,7 +95,7 @@ async function updateTransactions(banking: Banking) {
   if (!db.transactions) db.transactions = [];
 
   let new_transac: LocalTransaction[] = banking.transactions
-    .filter((transac) => transac.timestamp > db.lastTransactionTimestamp)
+    .filter((transac) => transac.timestamp > (db.lastTransactionTimestamp ?? 0))
     .map(transac => ({
       action: transac.action,
       amount: transac.amount,
@@ -123,6 +124,7 @@ async function updateTransactions(banking: Banking) {
     db.lastTransactionTimestamp = transaction.timestamp;
   }
 
+  db.balance = banking.balance;
   await Bun.write(DB_FILE, JSON.stringify(db));
   is_file_locked = false;
 }
@@ -214,13 +216,13 @@ h1 {
         <h1>Transactions history</h1>
         <ol class="history-list">
           {{#each transactions}}
-            <li>{{this.action}} {{this.amount}} — {{this.user}} ({{this.timestamp}}) </li>
+            <li>{{this.timestamp}} | {{this.action}} of {{this.amount}} coins by {{this.user}} </li>
           {{/each}}
         </ol>
     </div>
     <div class="balance">
         <h1>Account balance</h1>
-        <p class="total">Total: X coins</p>
+        <p class="total">Total: {{balance}} coins</p>
         <h2 class="members">Members list</h2>
         <ul class="members-list">
           {{#each users}}
@@ -232,7 +234,7 @@ h1 {
 </html>
     `);
 
-    let html = template({ transactions: db.transactions?.reverse(), users: db.users });
+    let html = template({ transactions: db.transactions?.reverse(), users: db.users, balance: db.balance });
     return new Response(html, { headers: { "Content-Type": "text/html" } });
   },
 })
