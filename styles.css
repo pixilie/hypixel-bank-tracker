@@ -1,0 +1,56 @@
+body {
+  background-color: #999999;
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  display: flex;
+}
+
+h1 {
+  text-align: center;
+}
+
+.transaction-history li {
+  list-style-type: none;
+  margin: 1%;
+}
+
+.transaction-history {
+  width: 50%;
+  margin: 0 auto;
+  padding: 20px;
+  margin: 20px;
+  background-color: #cccccc;
+  border-radius: 5px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.balance {
+  width: 50%;
+  margin: 0 auto;
+  padding: 20px;
+  margin: 20px;
+  background-color: #cccccc;
+  border-radius: 5px;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+}
+
+.total {
+  font-size: 150%;
+  text-align: center;
+}
+
+.members {
+  margin-top: 5%;
+}
+
+.members-list {
+  padding: 0%;
+  margin: 0 auto;
+}
+
+.members-list li {
+  list-style-type: none;
+  font-size: 120%;
+  margin: 1%;
+}

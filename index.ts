@@ -1,16 +1,13 @@
 import { compile } from "handlebars";
+import "dotenv/config";
 
-const DB_FILE = "./data.json";
-let is_file_locked = false;
-
-const API_KEY = "51a267a2-0701-43d2-be2e-9d8ed03485e1";
-const PROFILE_UUID = "cf0499b7-45a6-4e2c-9150-ae32ec8a2b66";
+const DB_FILE = "data.json";
 
 interface DataFile {
-  lastTransactionTimestamp?: number;
-  balance?: number;
-  users?: Record<Username, number>;
-  transactions?: LocalTransaction[];
+  lastTransactionTimestamp: number;
+  balance: number;
+  users: Record<Username, number>;
+  transactions: LocalTransaction[];
 }
 
 interface LocalTransaction {
@@ -24,10 +21,8 @@ type Uuid = string & { readonly _sym: unique symbol; };
 type Username = string & { readonly _sym: unique symbol; };
 type StyledUsername = string & { readonly _sym: unique symbol; };
 
-interface ProfileResponse {
-  success: boolean;
-  profile: Profile;
-}
+type HypixelResponse<T> = ({ success: true; } & T) | { success: false; cause: string };
+type ProfileResponse = HypixelResponse<{ profile: Profile }>;
 
 interface Profile {
   profile_id: string;
@@ -37,11 +32,9 @@ interface Profile {
   banking: Banking;
 }
 
-interface Member {
-  // TODO
-}
+interface Member { /* TODO */ }
 
-interface CommunityUpgrades { }
+interface CommunityUpgrades { /* TODO */ }
 
 interface Banking {
   balance: number;
@@ -61,40 +54,24 @@ enum TransactionAction {
 }
 
 async function fetchApi() {
-  console.log("Fetching new info for profile");
+  console.log(`Fetching fresh information for profile '${process.env.PROFILE_UUID!}'`);
 
   let url = new URL("https://api.hypixel.net/v2/skyblock/profile");
-  url.searchParams.append("key", API_KEY);
-  url.searchParams.append("profile", PROFILE_UUID);
+  url.searchParams.append("key", process.env.API_KEY!);
+  url.searchParams.append("profile", process.env.PROFILE_UUID!);
 
-  let res = await fetch(url);
+  let data: ProfileResponse = await fetch(url).then((res) => res.json());
+  if (!data.success) throw new Error(`There was an error while fetching Hypixel's API: ${data.cause}`);
 
-  if (!res.ok) {
-    console.error("Could not properly fetch API!")
-  }
-
-  let data: ProfileResponse = await res.json();
-
-  if (!data.success) {
-    console.error("200 yet hypixel is taunting")
-  }
-
-  let profile = data.profile;
-
-  updateTransactions(profile.banking);
+  updateTransactions(data.profile.banking);
 }
 
 async function updateTransactions(banking: Banking) {
-  console.log("Updating user transactions");
-  while (is_file_locked) { }
-  is_file_locked = true;
+  console.log("TSC: Updating");
+
   const db: DataFile = await Bun.file(DB_FILE).json();
 
-  if (!db.lastTransactionTimestamp) db.lastTransactionTimestamp = 0;
-  if (!db.users) db.users = {};
-  if (!db.transactions) db.transactions = [];
-
-  let new_transac: LocalTransaction[] = banking.transactions
+  let newTransactions: LocalTransaction[] = banking.transactions
     .filter((transac) => transac.timestamp > (db.lastTransactionTimestamp ?? 0))
     .map(transac => ({
       action: transac.action,
@@ -103,10 +80,10 @@ async function updateTransactions(banking: Banking) {
       user: processDisplayUsername(transac.initiator_name)
     }));
 
-  db.transactions = db.transactions.concat(new_transac);
+  db.transactions = db.transactions.concat(newTransactions);
 
-  for (const transaction of new_transac) {
-    console.log(`TRANSAC: ${transaction.user} has ${transaction.action} ${transaction.amount} coins`)
+  for (const transaction of newTransactions) {
+    console.log(`TSC NEW: ${transaction.user} has ${transaction.action} ${transaction.amount} coins`)
 
     if (!db.users[transaction.user]) {
       db.users[transaction.user] = 0;
@@ -124,117 +101,52 @@ async function updateTransactions(banking: Banking) {
     db.lastTransactionTimestamp = transaction.timestamp;
   }
 
+  if (newTransactions.length >= 50) console.warn("TSC WARN: there are 50 new transactions, maybe some were not correctly registered");
+
+  let sum = Object.values(db.users).reduce((sum, a) => sum + a, 0);
+  let drift = Math.abs(banking.balance - sum);
+  console.log(`TSC DRIFT: found ${drift} (balance ${banking.balance}, sum ${sum})`)
+
   db.balance = banking.balance;
+
   await Bun.write(DB_FILE, JSON.stringify(db));
-  is_file_locked = false;
 }
 
 function processDisplayUsername(display: StyledUsername): Username {
   if (display === "Bank Interest") {
     return "Bank Interest" as Username;
   } else {
+    // Strip `§a` Minecraft display style tag
     return display.slice(2) as Username
   }
 }
 
-fetchApi();
-setInterval(fetchApi, 10 * 60 * 1000)
+
+async function renderHtml() {
+  const db: DataFile = await Bun.file(DB_FILE).json();
+
+  let template = compile<DataFile>(await Bun.file("index.html.hbs").text());
+
+  let helpers = {
+    formatDateTime(date: number) {
+      return new Intl.DateTimeFormat('fr-FR', { month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" }).format(date);
+    },
+    isDeposit: (arg: string) => (arg === TransactionAction.Deposit),
+  }
+
+  let html = template({ ...db, transactions: db.transactions.reverse() }, { helpers });
+  return new Response(html, { headers: { "Content-Type": "text/html" } });
+}
 
 Bun.serve({
-  port: 3000,
   async fetch(request, server) {
-    const db: DataFile = await Bun.file(DB_FILE).json();
-
-    let template = compile(`<!DOCTYPE html>
-<html lang="fr">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bank Account Tracker</title>
-    <link rel="stylesheet" href="style.css">
-</head>
-<body>
-    <style>
-    body {
-    background-color: #999999;
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 0;
-    display: flex;
-}
-
-h1 {
-    text-align: center;
-}
-
-.transaction-history li {
-    list-style-type: none;
-    margin: 1%;
-}
-
-.transaction-history {
-    width: 50%;
-    margin: 0 auto;
-    padding: 20px;
-    margin: 20px;
-    background-color: #cccccc;
-    border-radius: 5px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-}
-
-.balance {
-    width: 50%;
-    margin: 0 auto;
-    padding: 20px;
-    margin: 20px;
-    background-color: #cccccc;
-    border-radius: 5px;
-    box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-}
-
-.total {
-    font-size: 150%;
-    text-align: center;
-}
-
-.members {
-    margin-top: 5%;
-}
-
-.members-list {
-    padding: 0%;
-    margin: 0 auto;
-}
-
-.members-list li {
-    list-style-type: none;
-    font-size: 120%;
-    margin: 1%;
-}
-    </style>
-    <div class="transaction-history">
-        <h1>Transactions history</h1>
-        <ol class="history-list">
-          {{#each transactions}}
-            <li>{{this.timestamp}} | {{this.action}} of {{this.amount}} coins by {{this.user}} </li>
-          {{/each}}
-        </ol>
-    </div>
-    <div class="balance">
-        <h1>Account balance</h1>
-        <p class="total">Total: {{balance}} coins</p>
-        <h2 class="members">Members list</h2>
-        <ul class="members-list">
-          {{#each users}}
-            <li>{{@key}}: {{this}} coins</li>
-          {{/each}}
-        </ul>
-    </div>
-</body>
-</html>
-    `);
-
-    let html = template({ transactions: db.transactions?.reverse(), users: db.users, balance: db.balance });
-    return new Response(html, { headers: { "Content-Type": "text/html" } });
+    const url = new URL(request.url);
+    if (url.pathname === "/") return renderHtml();
+    if (url.pathname === "/styles.css") return new Response(Bun.file("styles.css"));
+    return new Response("404!", { status: 404 });
   },
 })
+
+// Fetch once on startup and then fetch every 10m
+fetchApi();
+setInterval(fetchApi, 10 * 60 * 1000)

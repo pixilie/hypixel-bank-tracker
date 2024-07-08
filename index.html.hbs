@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bank Account Tracker</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+    <div class="transaction-history">
+        <h1>Transactions history</h1>
+		<p>Last check: {{formatDateTime lastTransactionTimestamp}}</p>
+        <ol class="history-list">
+          {{#each transactions}}
+            <li>
+				<span class="action">{{#if (isDeposit this.action)}}+{{else}}-{{/if}}</span>
+				{{this.amount}} coins by {{this.user}} — {{formatDateTime this.timestamp}}</li>
+          {{/each}}
+        </ol>
+    </div>
+    <div class="balance">
+        <h1>Account balance</h1>
+        <p class="total">Total: {{balance}} coins</p>
+        <h2 class="members">Members list</h2>
+        <ul class="members-list">
+          {{#each users}}
+            <li>{{@key}}: {{this}} coins</li>
+          {{/each}}
+        </ul>
+    </div>
+</body>
+</html>
+
