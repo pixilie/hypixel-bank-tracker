@@ -68,7 +68,9 @@ async function fetchApi() {
   updateTransactions(data.profile.banking);
   lastCheckTimestamp = Date.now();
 
-  console.log(`Got fresh information for profile '${process.env.PROFILE_UUID!}'`);
+  console.log(`Got fresh information for profile '${process.env.PROFILE_UUID!}', reloading clients`);
+
+  server.publish("reload", "reload");
 }
 
 async function updateTransactions(banking: Banking) {
@@ -188,11 +190,27 @@ fetchApi();
 setInterval(fetchApi, 10 * 60 * 1000)
 
 // Server
-Bun.serve({
+const server = Bun.serve({
   async fetch(request, server) {
     const url = new URL(request.url);
     if (url.pathname === "/") return renderHtml();
-    if (url.pathname === "/styles.css") return new Response(Bun.file("styles.css"));
+    else if (url.pathname === "/styles.css") return new Response(Bun.file("styles.css"));
+    else if (url.pathname === "/script.js") return new Response(Bun.file("script.js"));
+    else if (url.pathname === "/ws") { server.upgrade(request); return; };
+
     return new Response("404!", { status: 404 });
   },
-})
+
+  websocket: {
+    open(ws) { ws.subscribe("reload"); },
+    close(_ws, _code, _message) { },
+    message(_ws, message) {
+      if (message === "reload") {
+        console.log(`<== WS ACTION: reloading ==>`);
+        fetchApi()
+      } else {
+        console.error(`WS: unknown message ${message}`);
+      }
+    },
+  }
+});
