@@ -1,56 +1,93 @@
+:root {
+  --wll-primary: black;
+
+  --wll-bg: white;
+  --wll-bg-second: oklch(95% 0 0);
+}
+
 body {
-  background-color: #999999;
-  font-family: Arial, sans-serif;
+  background-color: var(--wll-bg-second);
+
+  font-family: monospace;
+
   margin: 0;
   padding: 0;
+}
+
+
+.box {
+  margin: 2rem;
+  padding: 2rem;
+
+  background-color: var(--wll-bg);
+  border-radius: 5px;
+  box-shadow: 0 0 10px oklch(0% 0 0 / 10%);
+}
+
+/* Specific */
+
+.dual {
   display: flex;
 }
 
-h1 {
-  text-align: center;
-}
-
-.transaction-history li {
-  list-style-type: none;
-  margin: 1%;
-}
-
-.transaction-history {
+#transaction-history {
   width: 50%;
-  margin: 0 auto;
-  padding: 20px;
-  margin: 20px;
-  background-color: #cccccc;
-  border-radius: 5px;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+
+  ul {
+    list-style-type: none;
+    margin: 0;
+    padding: 0;
+  }
+
+  li {
+    font-size: 1.2rem;
+
+    .action {
+      font-size: 2rem;
+      vertical-align: middle;
+
+      &.deposit {
+        color: green
+      }
+
+      &.withdrawal {
+        color: red;
+      }
+    }
+
+    .user {
+      font-style: italic;
+    }
+  }
 }
 
-.balance {
+#additional-info {
   width: 50%;
-  margin: 0 auto;
-  padding: 20px;
-  margin: 20px;
-  background-color: #cccccc;
-  border-radius: 5px;
-  box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-}
 
-.total {
-  font-size: 150%;
-  text-align: center;
-}
+  #balance {
+    .total {
+      font-size: 1.5rem;
+    }
 
-.members {
-  margin-top: 5%;
-}
+    .members {
+      h2 {
+        font-size: 1.5rem;
+      }
 
-.members-list {
-  padding: 0%;
-  margin: 0 auto;
-}
+      ul {
+        list-style-type: none;
+        margin: 0;
+        padding: 0;
+      }
 
-.members-list li {
-  list-style-type: none;
-  font-size: 120%;
-  margin: 1%;
+      li {
+        font-size: 1.2rem;
+        list-style-type: none;
+
+        .user {
+          font-style: italic;
+        }
+      }
+    }
+  }
 }

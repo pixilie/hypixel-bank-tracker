@@ -53,6 +53,8 @@ enum TransactionAction {
   Withdraw = "WITHDRAW",
 }
 
+let lastCheckTimestamp: number = 0;
+
 async function fetchApi() {
   console.log(`Fetching fresh information for profile '${process.env.PROFILE_UUID!}'`);
 
@@ -64,6 +66,9 @@ async function fetchApi() {
   if (!data.success) throw new Error(`There was an error while fetching Hypixel's API: ${data.cause}`);
 
   updateTransactions(data.profile.banking);
+  lastCheckTimestamp = Date.now();
+
+  console.log(`Got fresh information for profile '${process.env.PROFILE_UUID!}'`);
 }
 
 async function updateTransactions(banking: Banking) {
@@ -83,7 +88,7 @@ async function updateTransactions(banking: Banking) {
   db.transactions = db.transactions.concat(newTransactions);
 
   for (const transaction of newTransactions) {
-    console.log(`TSC NEW: ${transaction.user} has ${transaction.action} ${transaction.amount} coins`)
+    console.log(`TSC NEW: ${transaction.user} has ${transaction.action} ${transaction.amount} ¤`)
 
     if (!db.users[transaction.user]) {
       db.users[transaction.user] = 0;
@@ -104,8 +109,8 @@ async function updateTransactions(banking: Banking) {
   if (newTransactions.length >= 50) console.warn("TSC WARN: there are 50 new transactions, maybe some were not correctly registered");
 
   let sum = Object.values(db.users).reduce((sum, a) => sum + a, 0);
-  let drift = Math.abs(banking.balance - sum);
-  console.log(`TSC DRIFT: found ${drift} (balance ${banking.balance}, sum ${sum})`)
+  let drift = banking.balance - sum;
+  if (Math.abs(drift) > 1) console.warn(`TSC DRIFT: found ${drift} between balance (${banking.balance}) and sum (${sum})`)
 
   db.balance = banking.balance;
 
@@ -121,23 +126,44 @@ function processDisplayUsername(display: StyledUsername): Username {
   }
 }
 
-
 async function renderHtml() {
   const db: DataFile = await Bun.file(DB_FILE).json();
 
-  let template = compile<DataFile>(await Bun.file("index.html.hbs").text());
+
+  type UserBalance = { name: string, commonBalance: number, personalBalance: number };
+  type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'transactions'>
+    & { users: UserBalance[]; lastCheckTimestamp: number; }
+  let template = compile<TemplateContext>(await Bun.file("index.html.hbs").text());
 
   let helpers = {
-    formatDateTime(date: number) {
+    formatBalance(number: number): string {
+      return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0, style: "currency", currency: "XXX", currencyDisplay: "symbol" }).format(
+        number,
+      );
+    },
+    formatTimestamp(date: number): string {
       return new Intl.DateTimeFormat('fr-FR', { month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" }).format(date);
     },
-    isDeposit: (arg: string) => (arg === TransactionAction.Deposit),
+
+    isDeposit: (arg: string): boolean => (arg === TransactionAction.Deposit),
   }
 
-  let html = template({ ...db, transactions: db.transactions.reverse() }, { helpers });
+  let html = template({
+    ...db,
+    users: Object.entries(db.users)
+      .map(([name, commonBalance]) => ({ name, commonBalance, personalBalance: 0 }))
+      .sort((a, b) => b.commonBalance - a.commonBalance),
+    transactions: db.transactions.reverse(),
+    lastCheckTimestamp
+  }, { helpers });
   return new Response(html, { headers: { "Content-Type": "text/html" } });
 }
 
+// Fetch once on startup and then fetch every 10m
+fetchApi();
+setInterval(fetchApi, 10 * 60 * 1000)
+
+// Server
 Bun.serve({
   async fetch(request, server) {
     const url = new URL(request.url);
@@ -146,7 +172,3 @@ Bun.serve({
     return new Response("404!", { status: 404 });
   },
 })
-
-// Fetch once on startup and then fetch every 10m
-fetchApi();
-setInterval(fetchApi, 10 * 60 * 1000)

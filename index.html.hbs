@@ -3,32 +3,51 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>Bank Account Tracker</title>
+
     <link rel="stylesheet" href="styles.css">
 </head>
 
 <body>
-    <div class="transaction-history">
+<div class="dual">
+    <div id="transaction-history" class="box">
         <h1>Transactions history</h1>
-		<p>Last check: {{formatDateTime lastTransactionTimestamp}}</p>
-        <ol class="history-list">
-          {{#each transactions}}
-            <li>
-				<span class="action">{{#if (isDeposit this.action)}}+{{else}}-{{/if}}</span>
-				{{this.amount}} coins by {{this.user}} — {{formatDateTime this.timestamp}}</li>
-          {{/each}}
-        </ol>
-    </div>
-    <div class="balance">
-        <h1>Account balance</h1>
-        <p class="total">Total: {{balance}} coins</p>
-        <h2 class="members">Members list</h2>
-        <ul class="members-list">
-          {{#each users}}
-            <li>{{@key}}: {{this}} coins</li>
-          {{/each}}
+        <ul class="history-list">
+          {{#each transactions~}}
+	        <li>
+				<span class="action {{#if (isDeposit this.action)}}deposit{{else}}withdrawal{{/if}}">{{#if (isDeposit this.action)}}+{{else}}-{{/if}}</span>
+				{{formatBalance this.amount}} by <span class="user">{{this.user}}</span> — {{formatTimestamp this.timestamp}}
+			</li>
+          {{~/each}}
         </ul>
     </div>
+	<div id="additional-info">
+	    <div class="box balance">
+	        <h1>Balance</h1>
+
+	        <p class="total">Total: {{formatBalance balance}}</p>
+
+			<div class="members">
+		        <h2>Members</h2>
+
+		        <ul>
+		          {{#each users~}}
+		            <li>
+						<span class="user">{{this.name}}</span>: {{formatBalance this.commonBalance}} + {{formatBalance this.personalBalance}}
+					</li>
+		          {{~/each}}
+		        </ul>
+			</div>
+	    </div>
+
+	    <div id="technical-infos" class="box">
+	        <h1>Technical informations</h1>
+			<p>Last check: {{formatTimestamp lastCheckTimestamp}}</p>
+			<p>Last transaction: {{formatTimestamp lastTransactionTimestamp}}</p>
+	    </div>
+    </div>
+<div>
 </body>
 </html>
 
