@@ -3,9 +3,14 @@ import "dotenv/config";
 
 const DB_FILE = "data.json";
 
+const BANK_INTEREST_USERNAME: Username = "Bank Interest" as Username;
+// Used to indicate maybe missing transactions, and date of drift finding
+const WEIRD_WAYPOINT_USERNAME: Username = "Weird Waypoint" as Username;
+
 interface DataFile {
   lastTransactionTimestamp: number;
   balance: number;
+  drift: number;
   users: Record<Username, number>;
   transactions: LocalTransaction[];
 }
@@ -79,15 +84,23 @@ async function updateTransactions(banking: Banking) {
   const db: DataFile = await Bun.file(DB_FILE).json();
 
   let newTransactions: LocalTransaction[] = banking.transactions
-    .filter((transac) => transac.timestamp > (db.lastTransactionTimestamp ?? 0))
-    .map(transac => ({
-      action: transac.action,
-      amount: transac.amount,
-      timestamp: transac.timestamp,
-      user: processDisplayUsername(transac.initiator_name)
+    .filter((transaction) => transaction.timestamp > (db.lastTransactionTimestamp ?? 0))
+    .map(transaction => ({
+      ...transaction,
+      user: processDisplayUsername(transaction.initiator_name)
     }));
 
   db.transactions = db.transactions.concat(newTransactions);
+
+  if (newTransactions.length >= 50) {
+    console.warn("TSC WARN: there are 50 new transactions, maybe some were not correctly registered");
+    newTransactions.push({
+      action: TransactionAction.Deposit,
+      amount: 0,
+      timestamp: Date.now(),
+      user: WEIRD_WAYPOINT_USERNAME,
+    })
+  }
 
   for (const transaction of newTransactions) {
     console.log(`TSC NEW: ${transaction.user} has ${transaction.action} ${transaction.amount} ¤`)
@@ -108,11 +121,10 @@ async function updateTransactions(banking: Banking) {
     db.lastTransactionTimestamp = transaction.timestamp;
   }
 
-  if (newTransactions.length >= 50) console.warn("TSC WARN: there are 50 new transactions, maybe some were not correctly registered");
-
   let sum = Object.values(db.users).reduce((sum, a) => sum + a, 0);
   let drift = banking.balance - sum;
   if (Math.abs(drift) > 1) console.warn(`TSC DRIFT: found ${drift} between balance (${banking.balance}) and sum (${sum})`)
+  db.drift = drift;
 
   db.balance = banking.balance;
 
@@ -120,8 +132,8 @@ async function updateTransactions(banking: Banking) {
 }
 
 function processDisplayUsername(display: StyledUsername): Username {
-  if (display === "Bank Interest") {
-    return "Bank Interest" as Username;
+  if (display === BANK_INTEREST_USERNAME as string) {
+    return BANK_INTEREST_USERNAME;
   } else {
     // Strip `§a` Minecraft display style tag
     return display.slice(2) as Username
@@ -133,21 +145,24 @@ async function renderHtml() {
 
 
   type UserBalance = { name: string, commonBalance: number, personalBalance: number };
-  type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'transactions'>
+  type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'transactions' | 'drift'>
     & { users: UserBalance[]; lastCheckTimestamp: number; }
   let template = compile<TemplateContext>(await Bun.file("index.html.hbs").text());
 
   let helpers = {
-    formatBalance(number: number): string {
+    formatBalance(balance: number): string {
       return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0, style: "currency", currency: "XXX", currencyDisplay: "symbol" }).format(
-        number,
+        balance,
       );
     },
-    formatTimestamp(date: number): string {
-      return new Intl.DateTimeFormat('fr-FR', { month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" }).format(date);
+    formatTimestamp(timestamp: number): string {
+      return new Intl.DateTimeFormat('fr-FR', { month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" }).format(timestamp);
     },
 
-    isDeposit: (arg: string): boolean => (arg === TransactionAction.Deposit),
+    isDeposit: (action: string): boolean => (action === TransactionAction.Deposit),
+    isAmountImportant: (amount: number) => (amount >= 5_000_000),
+    isAmountNegative: (amount: number) => (amount < 0),
+    isDriftImportant: (drift: number): boolean => (drift > 1),
   }
 
   let html = template({
@@ -196,7 +211,8 @@ const server = Bun.serve({
     if (url.pathname === "/") return renderHtml();
     else if (url.pathname === "/styles.css") return new Response(Bun.file("styles.css"));
     else if (url.pathname === "/script.js") return new Response(Bun.file("script.js"));
-    else if (url.pathname === "/ws") { server.upgrade(request); return; };
+    else if (url.pathname === "/favicon.ico") return new Response(Bun.file("favicon.ico"));
+    else if (url.pathname === "/ws") { server.upgrade(request); return; }
 
     return new Response("404!", { status: 404 });
   },

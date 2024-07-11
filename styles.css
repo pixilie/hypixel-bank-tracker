@@ -42,7 +42,7 @@ body {
   li {
     font-size: 1.2rem;
 
-    .action {
+    span.action {
       font-size: 2rem;
       vertical-align: middle;
 
@@ -55,7 +55,13 @@ body {
       }
     }
 
-    .user {
+    span.amount {
+      &.large {
+        font-weight: 800;
+      }
+    }
+
+    span.user {
       font-style: italic;
     }
   }
@@ -74,19 +80,47 @@ body {
         font-size: 1.5rem;
       }
 
-      ul {
-        list-style-type: none;
-        margin: 0;
-        padding: 0;
-      }
-
       li {
         font-size: 1.2rem;
-        list-style-type: none;
 
-        .user {
+        &[data-username="Bank Interest"] {
+          span.user {
+            color: oklch(80% 0 0);
+          }
+        }
+
+        span.user {
           font-style: italic;
         }
+
+        span.common-balance {
+          &.negative {
+            color: red;
+          }
+        }
+      }
+    }
+  }
+}
+
+#technical-infos {
+  #drift {
+    span {
+      &.important {
+        font-weight: 800;
+        color: red;
+      }
+    }
+  }
+
+  #websocket-info {
+    span {
+      &.connected {
+        color: green;
+      }
+
+      &.disconnected {
+        color: red;
       }
     }
   }

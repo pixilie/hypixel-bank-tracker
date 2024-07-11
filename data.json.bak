@@ -1,6 +1,7 @@
 {
   "lastTransactionTimestamp": 0,
   "balance": 0,
+  "drift": 0,
   "users": { },
   "transactions": []
 }
