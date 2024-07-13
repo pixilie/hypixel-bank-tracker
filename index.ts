@@ -122,8 +122,8 @@ async function updateTransactions(banking: Banking) {
   }
 
   let sum = Object.values(db.users).reduce((sum, a) => sum + a, 0);
-  let drift = banking.balance - sum;
-  if (Math.abs(drift) > 1) console.warn(`TSC DRIFT: found ${drift} between balance (${banking.balance}) and sum (${sum})`)
+  let drift = Math.abs(banking.balance - sum);
+  if (drift > 1) console.warn(`TSC DRIFT: found ${drift} between balance (${banking.balance}) and sum (${sum})`)
   db.drift = drift;
 
   db.balance = banking.balance;
