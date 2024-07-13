@@ -176,30 +176,6 @@ async function renderHtml() {
   return new Response(html, { headers: { "Content-Type": "text/html" } });
 }
 
-// Interactivity
-let consoleUsage = "Ctrl-C: quit, r: reload, ?: help";
-
-process.stdin.setRawMode(true);
-process.stdin.resume();
-process.stdin.setEncoding("utf8");
-process.stdin.on("data", (char: string) => {
-  if (char === "\u0003") {
-    console.log("<== ACTION: exit ==>")
-    process.exit();
-  } else if (char === "r") {
-    console.log("<== ACTION: reloading ==>")
-    fetchApi()
-  } else if (char === "?") {
-    console.log("<== ACTION: help ==>")
-    console.log(consoleUsage);
-  } else {
-    console.log("<== no such keybind ==>")
-    console.log(consoleUsage);
-  }
-});
-
-console.log(`USAGE: ${consoleUsage}`)
-
 // Fetch once on startup and then fetch every 10m
 fetchApi();
 setInterval(fetchApi, 10 * 60 * 1000)
