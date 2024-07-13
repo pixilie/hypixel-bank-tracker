@@ -33,36 +33,32 @@ body {
 #transaction-history {
   width: 50%;
 
-  ul {
-    list-style-type: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  li {
+  table tr {
     font-size: 1.2rem;
+    line-height: 1rem;
 
-    span.action {
-      font-size: 2rem;
-      vertical-align: middle;
+    td {
+      padding: .2rem .6rem;
 
-      &.deposit {
-        color: green
+      &.action {
+        font-size: 2rem;
+
+        &.deposit {
+          color: green
+        }
+
+        &.withdrawal {
+          color: red;
+        }
       }
 
-      &.withdrawal {
-        color: red;
+      &.amount {
+        text-align: right;
       }
-    }
 
-    span.amount {
-      &.large {
-        font-weight: 800;
+      &.user {
+        font-style: italic;
       }
-    }
-
-    span.user {
-      font-style: italic;
     }
   }
 }
@@ -80,22 +76,29 @@ body {
         font-size: 1.5rem;
       }
 
-      li {
+      table tr {
         font-size: 1.2rem;
+        line-height: 1rem;
 
         &[data-username="Bank Interest"] {
-          span.user {
+          td.user {
             color: oklch(80% 0 0);
           }
         }
 
-        span.user {
-          font-style: italic;
-        }
+        td {
+          padding: .2rem .6rem;
 
-        span.common-balance {
-          &.negative {
-            color: red;
+          &.user {
+            font-style: italic;
+          }
+
+          &.common-balance {
+            text-align: right;
+
+            &.negative {
+              color: red;
+            }
           }
         }
       }

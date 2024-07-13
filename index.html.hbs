@@ -14,15 +14,18 @@
 <div class="dual">
     <div id="transaction-history" class="box">
         <h1>Transactions history</h1>
-        <ul class="history-list">
+        <table class="history-list">
+		<tbody>
           {{#each transactions~}}
-	        <li>
-				<span class="action{{#if (isDeposit this.action)}} deposit{{else}} withdrawal{{/if}}">{{#if (isDeposit this.action)}}+{{else}}-{{/if}}</span>
-				<span class="amount{{#if (isAmountImportant this.amount)}} large{{/if}}">{{formatBalance this.amount}}</span>
-				by <span class="user">{{this.user}}</span> — {{formatTimestamp this.timestamp}}
-			</li>
+	        <tr>
+				<td class="action{{#if (isDeposit this.action)}} deposit{{else}} withdrawal{{/if}}">{{#if (isDeposit this.action)}}+{{else}}-{{/if}}</td>
+				<td class="amount{{#if (isAmountImportant this.amount)}} large{{/if}}">{{formatBalance this.amount}}</td>
+				<td class="user">by {{this.user}}</td>
+				<td>{{formatTimestamp this.timestamp}}</td>
+			</tr>
           {{~/each}}
-        </ul>
+		</tbody>
+        </table>
     </div>
 	<div id="additional-info">
 	    <div id="balance" class="box">
@@ -33,14 +36,16 @@
 			<div class="members">
 		        <h2>Members</h2>
 
-		        <ol>
+		        <table>
+				<tbody>
 		          {{#each users~}}
-		            <li data-username="{{this.name}}">
-						<span class="user">{{this.name}}</span>:
-						<span class="common-balance{{#if (isAmountNegative this.commonBalance)}} negative{{/if}}">{{formatBalance this.commonBalance}}</span>
-					</li>
+		            <tr data-username="{{this.name}}">
+						<td class="user">{{this.name}}</td>
+						<td class="common-balance{{#if (isAmountNegative this.commonBalance)}} negative{{/if}}">{{formatBalance this.commonBalance}}</td>
+					</tr>
 		          {{~/each}}
-		        </ol>
+				</tbody>
+		        </table>
 			</div>
 	    </div>
 

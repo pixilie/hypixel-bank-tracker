@@ -90,7 +90,6 @@ async function updateTransactions(banking: Banking) {
       user: processDisplayUsername(transaction.initiator_name)
     }));
 
-  db.transactions = db.transactions.concat(newTransactions);
 
   if (newTransactions.length >= 50) {
     console.warn("TSC WARN: there are 50 new transactions, maybe some were not correctly registered");
@@ -101,6 +100,8 @@ async function updateTransactions(banking: Banking) {
       user: WEIRD_WAYPOINT_USERNAME,
     })
   }
+
+  db.transactions = db.transactions.concat(newTransactions);
 
   for (const transaction of newTransactions) {
     console.log(`TSC NEW: ${transaction.user} has ${transaction.action} ${transaction.amount} ¤`)
