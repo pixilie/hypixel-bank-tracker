@@ -61,6 +61,10 @@ body {
       }
     }
   }
+
+  .number-of-transactions {
+    text-align: center;
+  }
 }
 
 #additional-info {

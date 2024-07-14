@@ -20,12 +20,13 @@
 	        <tr>
 				<td class="action{{#if (isDeposit this.action)}} deposit{{else}} withdrawal{{/if}}">{{#if (isDeposit this.action)}}+{{else}}-{{/if}}</td>
 				<td class="amount{{#if (isAmountImportant this.amount)}} large{{/if}}">{{formatBalance this.amount}}</td>
-				<td class="user">by {{this.user}}</td>
+				<td class="user">{{this.user}}</td>
 				<td>{{formatTimestamp this.timestamp}}</td>
 			</tr>
           {{~/each}}
 		</tbody>
         </table>
+		<p class="number-of-transactions">Shown {{transactions.length}} transactions on {{totalNumberOfTransactions}} recorded</p>
     </div>
 	<div id="additional-info">
 	    <div id="balance" class="box">
@@ -53,12 +54,12 @@
 	        <h1>Technical informations</h1>
 			<p>Last check: {{formatTimestamp lastCheckTimestamp}}</p>
 			<p>Last transaction: {{formatTimestamp lastTransactionTimestamp}}</p>
-			<p id="drift">Drift: <span class="{{#if (isDriftImportant drift)}}important{{/if}}">{{drift}}</span></p>
+			<p id="drift">Drift: <span {{#if (isDriftImportant drift)}}class="important"{{/if}}>{{drift}}</span></p>
 			<p id="websocket-info">WS: <span>connecting</span></p>
 			<button id="reload">Reload</button>
 	    </div>
     </div>
-<div>
+</div>
 </body>
 </html>
 

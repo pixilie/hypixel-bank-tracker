@@ -147,7 +147,7 @@ async function renderHtml() {
 
   type UserBalance = { name: string, commonBalance: number, personalBalance: number };
   type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'transactions' | 'drift'>
-    & { users: UserBalance[]; lastCheckTimestamp: number; }
+    & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfTransactions: number; }
   let template = compile<TemplateContext>(await Bun.file("index.html.hbs").text());
 
   let helpers = {
@@ -180,7 +180,8 @@ async function renderHtml() {
     users: Object.entries(db.users)
       .map(([name, commonBalance]) => ({ name, commonBalance, personalBalance: 0 }))
       .sort((a, b) => b.commonBalance - a.commonBalance),
-    transactions: db.transactions.reverse(),
+    transactions: db.transactions.reverse().slice(0, 50),
+    totalNumberOfTransactions: db.transactions.length,
     lastCheckTimestamp
   }, { helpers });
   return new Response(html, { headers: { "Content-Type": "text/html" } });
