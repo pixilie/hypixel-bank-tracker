@@ -152,12 +152,21 @@ async function renderHtml() {
 
   let helpers = {
     formatBalance(balance: number): string {
-      return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0, style: "currency", currency: "XXX", currencyDisplay: "symbol" }).format(
-        balance,
-      );
+      return new Intl.NumberFormat('fr-FR', {
+        maximumFractionDigits: 0,
+        style: "currency",
+        currency: "XXX",
+        currencyDisplay: "symbol",
+      }).format(balance);
     },
     formatTimestamp(timestamp: number): string {
-      return new Intl.DateTimeFormat('fr-FR', { month: "numeric", day: "numeric", hour: "numeric", minute: "numeric" }).format(timestamp);
+      return new Intl.DateTimeFormat('fr-FR', {
+        month: "numeric",
+        day: "numeric",
+        hour: "numeric",
+        minute: "numeric",
+        timeZone: "Europe/Paris",
+      }).format(timestamp);
     },
 
     isDeposit: (action: string): boolean => (action === TransactionAction.Deposit),
