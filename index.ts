@@ -87,9 +87,11 @@ async function updateTransactions(banking: Banking) {
 
   let newTransactions: LocalTransaction[] = banking.transactions
     .filter((transaction) => transaction.timestamp > (db.lastTransactionTimestamp ?? 0))
-    .map(transaction => ({
-      ...transaction,
-      user: processDisplayUsername(transaction.initiator_name),
+    .map(({ action, amount, initiator_name, timestamp }): LocalTransaction => ({
+      action,
+      amount,
+      timestamp,
+      user: processDisplayUsername(initiator_name),
       sender: null
     }));
 
