@@ -58,3 +58,30 @@ reloadButton.addEventListener("click", (ev) => {
   }
 });
 
+// ———
+const transferForm = document.querySelector("form#transaction-form");
+if (!transferForm) throw new Error("Could not select transfer form");
+const logsSpan = document.querySelector("span#transfer-logs")
+if (!logsSpan) throw new Error("Could not select logs span")
+const dataList = document.querySelector("datalist#users-list")
+if (!dataList) throw new Error("Could not select datalist")
+// ———
+
+transferForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+
+  let form = new FormData(transferForm);
+  let amount = parseInt(form.get("amount"));
+  let fromUser = form.get("from-user");
+  let toUser = form.get("to-user");
+  let userList = Array.from(dataList.options).map((elt) => elt.label)
+  console.log(userList)
+
+  if (amount <= 0) {
+    logsSpan.innerText = "Invalid amount: Must be greater than 0."
+  } else if (!userList.includes(fromUser) || !userList.includes(toUser)) {
+    logsSpan.innerText = "Invalid user: Unknown user"
+  } else {
+    ws.send(`transfer;${amount};${fromUser};${toUser}`);
+  }
+});

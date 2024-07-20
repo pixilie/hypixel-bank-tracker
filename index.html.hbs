@@ -18,8 +18,9 @@
 		<tbody>
           {{#each transactions~}}
 	        <tr>
-				<td class="action{{#if (isDeposit this.action)}} deposit{{else}} withdrawal{{/if}}">{{#if (isDeposit this.action)}}+{{else}}-{{/if}}</td>
+				<td class="action{{#if (isDeposit this.action)}} deposit {{else if (isTransfer this.action)}} transfer {{else}} withdrawal{{/if}}">{{#if (isDeposit this.action)}}+ {{else if (isTransfer this.action)}} ⬌ {{else}} - {{/if}}</td>
 				<td class="amount{{#if (isAmountImportant this.amount)}} large{{/if}}">{{formatBalance this.amount}}</td>
+				<td class="user">{{#if (isTransfer this.action)}} {{this.sender}} 🡒 {{/if}}</td>
 				<td class="user">{{this.user}}</td>
 				<td>{{formatTimestamp this.timestamp}}</td>
 			</tr>
@@ -50,16 +51,35 @@
 			</div>
 	    </div>
 
+		<div id="actions" class="box">
+            <h1>Transfer</h1>
+            <form id="transaction-form">
+                <datalist id="users-list">
+                  {{#each users~}}
+		            <option value="{{this.name}}">{{this.name}}</option>
+		          {{~/each}}
+                </datalist>
+
+                <label for="amount">Amount</label>
+                <input type="number" id="amount" name="amount" required>
+                <label for="from-user">From:</label>
+                <input type="text" list="users-list" id="from-user" name="from-user" required>
+                <label for="to-user">To:</label>
+                <input type="text" list="users-list" id="to-user" name="to-user" required>
+                <button id="transfer">Transfer</button>
+            </form>
+            <span id="transfer-logs"></span>
+        </div>
+
 	    <div id="technical-infos" class="box">
 	        <h1>Technical informations</h1>
 			<p>Last check: {{formatTimestamp lastCheckTimestamp}}</p>
 			<p>Last transaction: {{formatTimestamp lastTransactionTimestamp}}</p>
 			<p id="drift">Drift: <span {{#if (isDriftImportant drift)}}class="important"{{/if}}>{{drift}}</span></p>
 			<p id="websocket-info">WS: <span>connecting</span></p>
-			<button id="reload">Reload</button>
+			<button id="reload" action="submit">Reload</button>
 	    </div>
     </div>
 </div>
 </body>
 </html>
-

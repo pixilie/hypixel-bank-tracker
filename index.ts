@@ -19,6 +19,7 @@ interface LocalTransaction {
   amount: number;
   timestamp: number;
   user: Username;
+  sender: Username | null;
   action: TransactionAction;
 }
 
@@ -56,6 +57,7 @@ interface Transaction {
 enum TransactionAction {
   Deposit = "DEPOSIT",
   Withdraw = "WITHDRAW",
+  Transfer = "TRANSFER"
 }
 
 let lastCheckTimestamp: number = 0;
@@ -87,7 +89,8 @@ async function updateTransactions(banking: Banking) {
     .filter((transaction) => transaction.timestamp > (db.lastTransactionTimestamp ?? 0))
     .map(transaction => ({
       ...transaction,
-      user: processDisplayUsername(transaction.initiator_name)
+      user: processDisplayUsername(transaction.initiator_name),
+      sender: null
     }));
 
 
@@ -98,6 +101,7 @@ async function updateTransactions(banking: Banking) {
       amount: 0,
       timestamp: Date.now(),
       user: WEIRD_WAYPOINT_USERNAME,
+      sender: null,
     })
   }
 
@@ -117,6 +121,9 @@ async function updateTransactions(banking: Banking) {
       case TransactionAction.Withdraw:
         db.users[transaction.user] -= transaction.amount;
         break;
+      case TransactionAction.Transfer:
+        console.error("TSF: Cannot get transfer as a TransactionAction from hypixel")
+        break;
     }
 
     db.lastTransactionTimestamp = transaction.timestamp;
@@ -126,7 +133,6 @@ async function updateTransactions(banking: Banking) {
   let drift = Math.abs(banking.balance - sum);
   if (drift > 1) console.warn(`TSC DRIFT: found ${drift} between balance (${banking.balance}) and sum (${sum})`)
   db.drift = drift;
-
   db.balance = banking.balance;
 
   await Bun.write(DB_FILE, JSON.stringify(db));
@@ -143,7 +149,6 @@ function processDisplayUsername(display: StyledUsername): Username {
 
 async function renderHtml() {
   const db: DataFile = await Bun.file(DB_FILE).json();
-
 
   type UserBalance = { name: string, commonBalance: number, personalBalance: number };
   type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'transactions' | 'drift'>
@@ -173,6 +178,7 @@ async function renderHtml() {
     isAmountImportant: (amount: number) => (amount >= 5_000_000),
     isAmountNegative: (amount: number) => (amount < 0),
     isDriftImportant: (drift: number): boolean => (drift > 1),
+    isTransfer: (action: string): boolean => (action === TransactionAction.Transfer),
   }
 
   let html = template({
@@ -185,6 +191,26 @@ async function renderHtml() {
     lastCheckTimestamp
   }, { helpers });
   return new Response(html, { headers: { "Content-Type": "text/html" } });
+}
+
+async function processTransfer(amount: number, fromUser: Username, toUser: Username){
+  let timestamp = Date.now()
+  let newTransfer: LocalTransaction = {amount: amount, sender: fromUser, user: toUser, action: TransactionAction.Transfer, timestamp: timestamp}
+
+  console.log(`TSF NEW: ${newTransfer.sender} has ${newTransfer.action} ${newTransfer.amount} to ${newTransfer.user} ¤`)
+
+  const db: DataFile = await Bun.file(DB_FILE).json();
+
+  if (!db.users[newTransfer.user]) {
+    db.users[newTransfer.user] = 0;
+  }
+
+  db.users[newTransfer.sender!] -= amount
+  db.users[newTransfer.user] += amount
+  db.lastTransactionTimestamp = newTransfer.timestamp;
+  db.transactions = db.transactions.concat([newTransfer]);
+
+  await Bun.write(DB_FILE, JSON.stringify(db));
 }
 
 // Fetch once on startup and then fetch every 10m
@@ -207,10 +233,19 @@ const server = Bun.serve({
   websocket: {
     open(ws) { ws.subscribe("reload"); },
     close(_ws, _code, _message) { },
-    message(_ws, message) {
-      if (message === "reload") {
+    async message(_ws, message:string) {
+      let args: string[] = message.split(";")
+      if (args[0] === "reload") {
         console.log(`<== WS ACTION: reloading ==>`);
-        fetchApi()
+        fetchApi();
+      } else if (args[0] === "transfer"){
+        console.log(`<== WS ACTION: transfer ==>`);
+        let amount = parseInt(args[1]);
+        let fromUser = args[2] as Username;
+        let toUser = args[3] as Username;
+
+        await processTransfer(amount, fromUser, toUser);
+        server.publish("reload", "reload");
       } else {
         console.error(`WS: unknown message ${message}`);
       }

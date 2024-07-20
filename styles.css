@@ -24,6 +24,21 @@ body {
   box-shadow: 0 0 10px oklch(0% 0 0 / 10%);
 }
 
+button {
+  font-size: 0.9rem;
+  padding: 0.4rem 0.9rem;
+  border: none;
+  border-radius: 5px;
+  background-color: var(--wll-bg-second);
+  color: black;
+  cursor: pointer;
+  margin: 0.5rem 0;
+
+  &:hover {
+      background-color: oklch(90% 0 0);
+  }
+}
+
 /* Specific */
 
 .dual {
@@ -49,6 +64,10 @@ body {
 
         &.withdrawal {
           color: red;
+        }
+
+        &.transfer {
+            color: oklch(82.67% 0.163 78.35);
         }
       }
 
@@ -107,6 +126,17 @@ body {
         }
       }
     }
+  }
+
+  #transaction-form {
+      margin-top: 2rem;
+      margin-bottom: 2rem;
+      font-size: 1.2rem;
+  }
+
+  #transfer-logs {
+      color: red;
+      font-size: 1.2rem;
   }
 }
 
