@@ -35,7 +35,7 @@ button {
   margin: 0.5rem 0;
 
   &:hover {
-      background-color: oklch(90% 0 0);
+    background-color: oklch(90% 0 0);
   }
 }
 
@@ -57,6 +57,7 @@ button {
 
       &.action {
         font-size: 2rem;
+        text-align: center;
 
         &.deposit {
           color: green
@@ -67,7 +68,7 @@ button {
         }
 
         &.transfer {
-            color: oklch(82.67% 0.163 78.35);
+          color: oklch(82% 0.16 78);
         }
       }
 
@@ -129,14 +130,14 @@ button {
   }
 
   #transaction-form {
-      margin-top: 2rem;
-      margin-bottom: 2rem;
-      font-size: 1.2rem;
+    margin-top: 2rem;
+    margin-bottom: 2rem;
+    font-size: 1.2rem;
   }
 
   #transfer-logs {
-      color: red;
-      font-size: 1.2rem;
+    color: red;
+    font-size: 1.2rem;
   }
 }
 
