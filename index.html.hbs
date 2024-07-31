@@ -21,7 +21,7 @@
 				<td class="action{{#if (isDeposit this.action)}} deposit {{else if (isTransfer this.action)}} transfer {{else}} withdrawal{{/if}}">{{#if (isDeposit this.action)}}+ {{else if (isTransfer this.action)}} ⬌ {{else}} - {{/if}}</td>
 				<td class="amount{{#if (isAmountImportant this.amount)}} large{{/if}}">{{formatBalance this.amount}}</td>
 				<td class="user">{{#if (isTransfer this.action)}} {{this.sender}} 🡒 {{/if}}</td>
-				<td class="user">{{this.user}}</td>
+				<td class="user">{{this.username}}</td>
 				<td>{{formatTimestamp this.timestamp}}</td>
 			</tr>
           {{~/each}}

@@ -3,7 +3,6 @@ import "dotenv/config";
 
 const DB_FILE = "data.json";
 
-const BANK_INTEREST_USERNAME: Username = "Bank Interest" as Username;
 // Used to indicate maybe missing transactions, and date of drift finding
 const WEIRD_WAYPOINT_USERNAME: Username = "Weird Waypoint" as Username;
 
@@ -18,7 +17,7 @@ interface DataFile {
 interface LocalTransaction {
   amount: number;
   timestamp: number;
-  user: Username;
+  username: Username;
   sender: Username | null;
   action: TransactionAction;
 }
@@ -91,8 +90,8 @@ async function updateTransactions(banking: Banking) {
       action,
       amount,
       timestamp,
-      user: processDisplayUsername(initiator_name),
-      sender: null
+      username: processDisplayUsername(initiator_name),
+      sender: null,
     }));
 
 
@@ -102,7 +101,7 @@ async function updateTransactions(banking: Banking) {
       action: TransactionAction.Deposit,
       amount: 0,
       timestamp: Date.now(),
-      user: WEIRD_WAYPOINT_USERNAME,
+      username: WEIRD_WAYPOINT_USERNAME,
       sender: null,
     })
   }
@@ -110,18 +109,18 @@ async function updateTransactions(banking: Banking) {
   db.transactions = db.transactions.concat(newTransactions);
 
   for (const transaction of newTransactions) {
-    console.log(`TSC NEW: ${transaction.user} has ${transaction.action} ${transaction.amount} ¤`)
+    console.log(`TSC NEW: ${transaction.username} has ${transaction.action} ${transaction.amount} ¤`)
 
-    if (!db.users[transaction.user]) {
-      db.users[transaction.user] = 0;
+    if (!db.users[transaction.username]) {
+      db.users[transaction.username] = 0;
     }
 
     switch (transaction.action) {
       case TransactionAction.Deposit:
-        db.users[transaction.user] += transaction.amount;
+        db.users[transaction.username] += transaction.amount;
         break;
       case TransactionAction.Withdraw:
-        db.users[transaction.user] -= transaction.amount;
+        db.users[transaction.username] -= transaction.amount;
         break;
       case TransactionAction.Transfer:
         console.error("TSF: Cannot get transfer as a TransactionAction from hypixel")
@@ -140,12 +139,13 @@ async function updateTransactions(banking: Banking) {
   await Bun.write(DB_FILE, JSON.stringify(db));
 }
 
+// Styled username may have a single mc color code at the start in the case of ranks
 function processDisplayUsername(display: StyledUsername): Username {
-  if (display === BANK_INTEREST_USERNAME as string) {
-    return BANK_INTEREST_USERNAME;
-  } else {
+  if (display.charAt(0) == "§") {
     // Strip `§a` Minecraft display style tag
     return display.slice(2) as Username
+  } else {
+    return display as unknown as Username;
   }
 }
 
@@ -195,20 +195,25 @@ async function renderHtml() {
   return new Response(html, { headers: { "Content-Type": "text/html" } });
 }
 
-async function processTransfer(amount: number, fromUser: Username, toUser: Username){
-  let timestamp = Date.now()
-  let newTransfer: LocalTransaction = {amount: amount, sender: fromUser, user: toUser, action: TransactionAction.Transfer, timestamp: timestamp}
+async function processTransfer(amount: number, sender: Username, reciever: Username) {
+  let newTransfer: LocalTransaction = {
+    amount,
+    sender,
+    username: reciever,
+    action: TransactionAction.Transfer,
+    timestamp: Date.now(),
+  };
 
-  console.log(`TSF NEW: ${newTransfer.sender} has ${newTransfer.action} ${newTransfer.amount} to ${newTransfer.user} ¤`)
+  console.log(`TSF NEW: ${newTransfer.sender} has ${newTransfer.action} ${newTransfer.amount} to ${newTransfer.username} ¤`)
 
   const db: DataFile = await Bun.file(DB_FILE).json();
 
-  if (!db.users[newTransfer.user]) {
-    db.users[newTransfer.user] = 0;
-  }
+  // Initalize users if not already done
+  if (!db.users[newTransfer.sender!]) db.users[newTransfer.sender!] = 0;
+  if (!db.users[newTransfer.username]) db.users[newTransfer.username] = 0;
 
   db.users[newTransfer.sender!] -= amount
-  db.users[newTransfer.user] += amount
+  db.users[newTransfer.username] += amount
   db.lastTransactionTimestamp = newTransfer.timestamp;
   db.transactions = db.transactions.concat([newTransfer]);
 
@@ -235,12 +240,12 @@ const server = Bun.serve({
   websocket: {
     open(ws) { ws.subscribe("reload"); },
     close(_ws, _code, _message) { },
-    async message(_ws, message:string) {
+    async message(_ws, message: string) {
       let args: string[] = message.split(";")
       if (args[0] === "reload") {
         console.log(`<== WS ACTION: reloading ==>`);
         fetchApi();
-      } else if (args[0] === "transfer"){
+      } else if (args[0] === "transfer") {
         console.log(`<== WS ACTION: transfer ==>`);
         let amount = parseInt(args[1]);
         let fromUser = args[2] as Username;
