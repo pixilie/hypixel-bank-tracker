@@ -141,6 +141,9 @@ async function updateTransactions(banking: Banking) {
 
 // Styled username may have a single mc color code at the start in the case of ranks
 function processDisplayUsername(display: StyledUsername): Username {
+  // Avoid duplicate Bank entity
+  if (display == "Bank Interest (x2)") return "Bank Interest" as Username;
+  
   if (display.charAt(0) == "§") {
     // Strip `§a` Minecraft display style tag
     return display.slice(2) as Username
