@@ -6,6 +6,9 @@ const DB_FILE = "data.json";
 // Used to indicate maybe missing transactions, and date of drift finding
 const WEIRD_WAYPOINT_USERNAME: Username = "Weird Waypoint" as Username;
 
+// Remarquable username to aggregate bank interests
+const BANK_INTEREST_USERNAME: Username = "Bank Interest" as Username;
+
 interface DataFile {
   lastTransactionTimestamp: number;
   balance: number;
@@ -142,7 +145,7 @@ async function updateTransactions(banking: Banking) {
 // Styled username may have a single mc color code at the start in the case of ranks
 function processDisplayUsername(display: StyledUsername): Username {
   // Avoid duplicate Bank entity
-  if (display == "Bank Interest (x2)") return "Bank Interest" as Username;
+  if (display == "Bank Interest (x2)") return BANK_INTEREST_USERNAME;
   
   if (display.charAt(0) == "§") {
     // Strip `§a` Minecraft display style tag
@@ -155,7 +158,7 @@ function processDisplayUsername(display: StyledUsername): Username {
 async function renderHtml() {
   const db: DataFile = await Bun.file(DB_FILE).json();
 
-  type UserBalance = { name: string, commonBalance: number, personalBalance: number };
+  type UserBalance = { name: Username, commonBalance: number, personalBalance: number };
   type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'transactions' | 'drift'>
     & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfTransactions: number; }
   let template = compile<TemplateContext>(await Bun.file("index.html.hbs").text());
@@ -189,8 +192,9 @@ async function renderHtml() {
   let html = template({
     ...db,
     users: Object.entries(db.users)
-      .map(([name, commonBalance]) => ({ name, commonBalance, personalBalance: 0 }))
-      .sort((a, b) => b.commonBalance - a.commonBalance),
+      .map(([name, commonBalance]) => ({ name: name as Username, commonBalance, personalBalance: 0 }))
+      .sort((a, b) => b.commonBalance - a.commonBalance)
+      .filter((user) => user.name !== BANK_INTEREST_USERNAME),
     transactions: db.transactions.reverse().slice(0, 50),
     totalNumberOfTransactions: db.transactions.length,
     lastCheckTimestamp
