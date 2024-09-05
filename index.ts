@@ -12,6 +12,7 @@ const BANK_INTEREST_USERNAME: Username = "Bank Interest" as Username;
 interface DataFile {
   lastTransactionTimestamp: number;
   balance: number;
+  maxBalance: number;
   drift: number;
   users: Record<Username, number>;
   transactions: LocalTransaction[];
@@ -28,7 +29,6 @@ interface LocalTransaction {
 type Uuid = string & { readonly _sym: unique symbol; };
 type Username = string & { readonly _sym: unique symbol; };
 type StyledUsername = string & { readonly _sym: unique symbol; };
-
 type HypixelResponse<T> = ({ success: true; } & T) | { success: false; cause: string };
 type ProfileResponse = HypixelResponse<{ profile: Profile }>;
 
@@ -40,7 +40,15 @@ interface Profile {
   banking: Banking;
 }
 
-interface Member { /* TODO */ }
+interface Member {
+  leveling: Leveling
+  /* TO FINISH */
+}
+
+interface Leveling {
+  completed_tasks: Array<string>;
+  /* TO FINISH */
+}
 
 interface CommunityUpgrades { /* TODO */ }
 
@@ -74,7 +82,7 @@ async function fetchApi() {
   let data: ProfileResponse = await fetch(url).then((res) => res.json());
   if (!data.success) throw new Error(`There was an error while fetching Hypixel's API: ${data.cause}`);
 
-  updateTransactions(data.profile.banking);
+  updateTransactions(data.profile);
   lastCheckTimestamp = Date.now();
 
   console.log(`Got fresh information for profile '${process.env.PROFILE_UUID!}', reloading clients`);
@@ -82,10 +90,37 @@ async function fetchApi() {
   server.publish("reload", "reload");
 }
 
-async function updateTransactions(banking: Banking) {
+function getBankLevel(profile: Profile): number {
+  const maxBalance: Record<string, number | undefined> = {
+    BANK_UPGRADE_STARTER: 5_000_00,
+    BANK_UPGRADE_GOLD: 100_000_000,
+    BANK_UPGRADE_DELUXE: 250_000_000,
+    BANK_UPGRADE_SUPER_DELUXE: 500_000_000,
+    BANK_UPGRADE_PREMIER: 1_000_000_000,
+    BANK_UPGRADE_LUXURIOUS: 6_000_000_000,
+    BANK_UPGRADE_PALATIAL: 60_000_000_000,
+  };
+
+  let bankMaxCoins = 0;
+  let UUID = "050ce16aada3482b8d82e3ee42c6d71b" as Uuid
+  let completedTasks = profile.members[UUID].leveling.completed_tasks
+
+  completedTasks.forEach((item) => {
+    let balance = maxBalance[item];
+    if (balance) {
+      bankMaxCoins = Math.max(bankMaxCoins, balance);
+    }
+  });
+
+  return bankMaxCoins;
+}
+
+async function updateTransactions(profile: Profile) {
   console.log("TSC: Updating");
 
   const db: DataFile = await Bun.file(DB_FILE).json();
+
+  let banking = profile.banking as Banking
 
   let newTransactions: LocalTransaction[] = banking.transactions
     .filter((transaction) => transaction.timestamp > (db.lastTransactionTimestamp ?? 0))
@@ -138,6 +173,7 @@ async function updateTransactions(banking: Banking) {
   if (drift > 1) console.warn(`TSC DRIFT: found ${drift} between balance (${banking.balance}) and sum (${sum})`)
   db.drift = drift;
   db.balance = banking.balance;
+  db.maxBalance = getBankLevel(profile);
 
   await Bun.write(DB_FILE, JSON.stringify(db));
 }
@@ -180,6 +216,9 @@ async function renderHtml() {
         minute: "numeric",
         timeZone: "Europe/Paris",
       }).format(timestamp);
+    },
+    calculPercentage(balance: number, maxBalance: number): number {
+      return Math.round((balance/maxBalance)*100)
     },
 
     isDeposit: (action: string): boolean => (action === TransactionAction.Deposit),
