@@ -182,7 +182,7 @@ async function updateTransactions(profile: Profile) {
 function processDisplayUsername(display: StyledUsername): Username {
   // Avoid duplicate Bank entity
   if (display == "Bank Interest (x2)") return BANK_INTEREST_USERNAME;
-  
+
   if (display.charAt(0) == "§") {
     // Strip `§a` Minecraft display style tag
     return display.slice(2) as Username
@@ -196,7 +196,7 @@ async function renderHtml() {
 
   type UserBalance = { name: Username, commonBalance: number, personalBalance: number };
   type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'transactions' | 'drift'>
-    & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfTransactions: number; }
+    & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfTransactions: number; bankInterest: number | undefined}
   let template = compile<TemplateContext>(await Bun.file("index.html.hbs").text());
 
   let helpers = {
@@ -218,9 +218,8 @@ async function renderHtml() {
       }).format(timestamp);
     },
     calculPercentage(balance: number, maxBalance: number): number {
-      return Math.round((balance/maxBalance)*100)
+      return Math.round((balance / maxBalance) * 100)
     },
-
     isDeposit: (action: string): boolean => (action === TransactionAction.Deposit),
     isAmountImportant: (amount: number) => (amount >= 5_000_000),
     isAmountNegative: (amount: number) => (amount < 0),
@@ -234,6 +233,11 @@ async function renderHtml() {
       .map(([name, commonBalance]) => ({ name: name as Username, commonBalance, personalBalance: 0 }))
       .sort((a, b) => b.commonBalance - a.commonBalance)
       .filter((user) => user.name !== BANK_INTEREST_USERNAME),
+    bankInterest: Object.entries(db.users)
+      .map(([name, commonBalance]) => ({ name: name as Username, commonBalance, personalBalance: 0 }))
+      .sort((a, b) => b.commonBalance - a.commonBalance)
+      .find((user) => user.name === BANK_INTEREST_USERNAME)
+      ?.commonBalance,
     transactions: db.transactions.reverse().slice(0, 50),
     totalNumberOfTransactions: db.transactions.length,
     lastCheckTimestamp
