@@ -31,10 +31,10 @@
     </div>
 	<div id="additional-info">
 	    <div id="balance" class="box">
-	        <h1>Balance</h1>
+	        <p class="balance-info">Balance: {{formatBalance balance}} ({{calculPercentage balance maxBalance}}%)</p>
+			<p class="balance-info additional">Max balance: {{formatBalance maxBalance}}</p>
 
-	        <p class="total">Total: {{formatBalance balance}} / {{formatBalance maxBalance}} - ({{calculPercentage balance maxBalance}}%)</p>
-			<p class="total">Bank interest: {{ formatBalance bankInterest }}</p>
+			<p class="balance-info">Interests: {{ formatBalance bankInterest }}</p>
 			
 			<div class="members">
 		        <h2>Members</h2>
@@ -61,12 +61,21 @@
 		          {{~/each}}
                 </datalist>
 
-                <label for="amount">Amount</label>
-                <input type="number" id="amount" name="amount" required>
-                <label for="from-user">From:</label>
-                <input type="text" list="users-list" id="from-user" name="from-user" required>
-                <label for="to-user">To:</label>
-                <input type="text" list="users-list" id="to-user" name="to-user" required>
+				<div>
+	                <label for="amount">Amount:</label>
+	                <input type="number" id="amount" name="amount" required>
+				</div>
+
+				<div>
+	                <label for="from-user">From user:</label>
+	                <input type="text" list="users-list" id="from-user" name="from-user" required>
+				</div>
+
+				<div>
+	                <label for="to-user">To user:</label>
+	                <input type="text" list="users-list" id="to-user" name="to-user" required>
+				</div>
+
                 <button id="transfer">Transfer</button>
             </form>
             <span id="transfer-logs"></span>

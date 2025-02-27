@@ -91,8 +91,15 @@ button {
   width: 50%;
 
   #balance {
-    .total {
+    .balance-info {
+      margin: 0;
+
       font-size: 1.5rem;
+
+      &.additional {
+        font-size: 1rem;
+        margin-bottom: 1rem;
+      }
     }
 
     .members {
@@ -130,9 +137,12 @@ button {
   }
 
   #transaction-form {
-    margin-top: 2rem;
-    margin-bottom: 2rem;
     font-size: 1.2rem;
+
+    label {
+      display: inline-block;
+      width: 8rem;
+    }
   }
 
   #transfer-logs {
