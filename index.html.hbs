@@ -56,7 +56,7 @@
             <h1>Transfer</h1>
             <form id="transaction-form">
                 <datalist id="users-list">
-                  {{#each users~}}
+                  {{#each allUsers~}}
 		            <option value="{{this.name}}">{{this.name}}</option>
 		          {{~/each}}
                 </datalist>

@@ -196,7 +196,7 @@ async function renderHtml() {
 
   type UserBalance = { name: Username, commonBalance: number, personalBalance: number };
   type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'transactions' | 'drift'>
-    & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfTransactions: number; bankInterest: number | undefined}
+    & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfTransactions: number; bankInterest: number | undefined, allUsers: UserBalance[]}
   let template = compile<TemplateContext>(await Bun.file("index.html.hbs").text());
 
   let helpers = {
@@ -233,6 +233,9 @@ async function renderHtml() {
       .map(([name, commonBalance]) => ({ name: name as Username, commonBalance, personalBalance: 0 }))
       .sort((a, b) => b.commonBalance - a.commonBalance)
       .filter((user) => user.name !== BANK_INTEREST_USERNAME),
+    allUsers: Object.entries(db.users)
+      .map(([name, commonBalance]) => ({ name: name as Username, commonBalance, personalBalance: 0 }))
+      .sort((a, b) => b.commonBalance - a.commonBalance),
     bankInterest: Object.entries(db.users)
       .map(([name, commonBalance]) => ({ name: name as Username, commonBalance, personalBalance: 0 }))
       .sort((a, b) => b.commonBalance - a.commonBalance)
