@@ -1,6 +1,8 @@
 import { compile } from "handlebars";
 import "dotenv/config";
 
+const VERSION = 1;
+
 const DB_FILE = "data.json";
 
 // Used to indicate maybe missing transactions, and date of drift finding
@@ -10,6 +12,7 @@ const WEIRD_WAYPOINT_USERNAME: Username = "Weird Waypoint" as Username;
 const BANK_INTEREST_USERNAME: Username = "Bank Interest" as Username;
 
 interface DataFile {
+  version: number,
   lastTransactionTimestamp: number;
   balance: number;
   maxBalance: number;
@@ -115,6 +118,44 @@ function getBankLevel(profile: Profile): number {
   return bankMaxCoins;
 }
 
+function absoluteAmount(transaction: LocalTransaction) {
+  switch (transaction.action) {
+    case TransactionAction.Deposit:
+      return transaction.amount;
+    case TransactionAction.Withdraw:
+      return -transaction.amount;
+    case TransactionAction.Transfer:
+      return transaction.amount;
+  }
+}
+
+function mergeTransactions(first: LocalTransaction, second: LocalTransaction): LocalTransaction | null {
+  if (first.sender === second.sender
+    && first.username === second.username
+    // only merge transactions that are within an hour
+    && Math.abs(first.timestamp - second.timestamp) < 60 * 60 * 1000
+    && first.action !== TransactionAction.Transfer
+    && second.action !== TransactionAction.Transfer) {
+    let newAmount = absoluteAmount(first) + absoluteAmount(second);
+
+    let outTransaction = first;
+    
+    if (newAmount > 0) {
+      outTransaction.action = TransactionAction.Deposit;
+      outTransaction.amount = newAmount;
+    } else if (newAmount < 0) {
+      outTransaction.action = TransactionAction.Withdraw;
+      outTransaction.amount = -newAmount;
+    } else {
+      return null;
+    }
+
+    return outTransaction;
+  }
+
+  return null;
+}
+
 async function updateTransactions(profile: Profile) {
   console.log("TSC: Updating");
 
@@ -144,7 +185,7 @@ async function updateTransactions(profile: Profile) {
     })
   }
 
-  db.transactions = db.transactions.concat(newTransactions);
+  let lastTransaction = db.transactions.pop() ?? null;
 
   for (const transaction of newTransactions) {
     console.log(`TSC NEW: ${transaction.username} has ${transaction.action} ${transaction.amount} ¤`)
@@ -165,7 +206,24 @@ async function updateTransactions(profile: Profile) {
         break;
     }
 
+    if (lastTransaction) {
+      let mergedTransaction = mergeTransactions(lastTransaction, transaction);
+      if (mergedTransaction) {
+        lastTransaction = mergedTransaction;
+      } else {
+        db.transactions.push(lastTransaction)
+        lastTransaction = transaction;
+      }
+      
+    } else {
+      lastTransaction = transaction;
+    }
+
     db.lastTransactionTimestamp = transaction.timestamp;
+  }
+
+  if (lastTransaction) {
+    db.transactions.push(lastTransaction)
   }
 
   let sum = Object.values(db.users).reduce((sum, a) => sum + a, 0);
@@ -196,7 +254,7 @@ async function renderHtml() {
 
   type UserBalance = { name: Username, commonBalance: number, personalBalance: number };
   type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'transactions' | 'drift'>
-    & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfTransactions: number; bankInterest: number | undefined, allUsers: UserBalance[]}
+    & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfTransactions: number; bankInterest: number | undefined, allUsers: UserBalance[] }
   let template = compile<TemplateContext>(await Bun.file("index.html.hbs").text());
 
   let helpers = {
@@ -273,9 +331,45 @@ async function processTransfer(amount: number, sender: Username, reciever: Usern
   await Bun.write(DB_FILE, JSON.stringify(db));
 }
 
-// Fetch once on startup and then fetch every 10m
-fetchApi();
-setInterval(fetchApi, 10 * 60 * 1000)
+function migrateMergeTransactions(db: DataFile): DataFile {
+  db.transactions = db.transactions.reduce((acc, transaction) => {
+    let lastTransaction = acc.pop();
+    if (lastTransaction) {
+      let mergedTransaction = mergeTransactions(lastTransaction, transaction)
+      if (mergedTransaction) {
+        acc.push(mergedTransaction);
+      } else {
+        acc.push(lastTransaction);
+        acc.push(transaction);
+      }
+    } else {
+        acc.push(transaction);
+    }
+    return acc;
+  }, [] as LocalTransaction[]);
+
+  return db;
+}
+
+async function runMigrations() {
+  let db: DataFile = await Bun.file(DB_FILE).json();
+  if (db.version === 0) {
+    // merge old transactions
+    db = migrateMergeTransactions(db);
+    db.version = 1;
+    await Bun.write(DB_FILE, JSON.stringify(db));
+  }
+
+  if (db.version === VERSION) {
+    // the database is up-to-date
+    return;
+  } else {
+    throw new Error("could not migrate db on startup")
+  }
+}
+
+// Startup
+await runMigrations();
 
 // Server
 const server = Bun.serve({
@@ -312,3 +406,7 @@ const server = Bun.serve({
     },
   }
 });
+
+// Fetch once on startup and then fetch every 10m
+await fetchApi();
+setInterval(fetchApi, 10 * 60 * 1000)
