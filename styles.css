@@ -45,45 +45,70 @@ button {
   display: flex;
 }
 
-#transaction-history {
+#history {
   width: 50%;
 
-  table tr {
-    font-size: 1.2rem;
-    line-height: 1rem;
+  #one-day {
+    table tr {
+      font-size: 1.2rem;
+      line-height: 1rem;
 
-    td {
-      padding: .2rem .6rem;
+      td {
+        padding: .2rem .6rem;
 
-      &.action {
-        font-size: 2rem;
-        text-align: center;
-
-        &.deposit {
-          color: green
+        &.user {
+          font-style: italic;
         }
 
-        &.withdrawal {
-          color: red;
+        &.delta {
+          text-align: right;
+
+          &.negative {
+            color: red;
+          }
         }
-
-        &.transfer {
-          color: oklch(82% 0.16 78);
-        }
-      }
-
-      &.amount {
-        text-align: right;
-      }
-
-      &.user {
-        font-style: italic;
       }
     }
   }
 
-  .number-of-transactions {
-    text-align: center;
+  #transaction-history {
+    table tr {
+      font-size: 1.2rem;
+      line-height: 1rem;
+
+      td {
+        padding: .2rem .6rem;
+
+        &.action {
+          font-size: 2rem;
+          text-align: center;
+
+          &.deposit {
+            color: green
+          }
+
+          &.withdrawal {
+            color: red;
+          }
+
+          &.transfer {
+            color: oklch(82% 0.16 78);
+          }
+        }
+
+        &.amount {
+          text-align: right;
+        }
+
+        &.user {
+          font-style: italic;
+        }
+      }
+    }
+
+    .number-of-transactions {
+      text-align: center;
+    }
   }
 }
 

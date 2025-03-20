@@ -12,23 +12,40 @@
 
 <body>
 <div class="dual">
-    <div id="transaction-history" class="box">
-        <h1>Transactions history</h1>
-        <table class="history-list">
-		<tbody>
-          {{#each transactions~}}
-	        <tr>
-				<td class="action{{#if (isDeposit this.action)}} deposit {{else if (isTransfer this.action)}} transfer {{else}} withdrawal{{/if}}">{{#if (isDeposit this.action)}}+ {{else if (isTransfer this.action)}} ⬌ {{else}} - {{/if}}</td>
-				<td class="amount{{#if (isAmountImportant this.amount)}} large{{/if}}">{{formatBalance this.amount}}</td>
-				<td class="user">{{#if (isTransfer this.action)}} {{this.sender}} 🡒 {{/if}}</td>
-				<td class="user">{{this.username}}</td>
-				<td>{{formatTimestamp this.timestamp}}</td>
-			</tr>
-          {{~/each}}
-		</tbody>
-        </table>
-		<p class="number-of-transactions">Shown {{transactions.length}} transactions on {{totalNumberOfTransactions}} recorded</p>
-    </div>
+	<div id="history">
+		<div id="one-day" class="box">
+		    <h1>One day overview</h1>
+	        <table class="one-day-overview-list">
+			<tbody>
+	          {{#each usersDelta~}}
+		        <tr>
+					<td class="user">{{this.name}}</td>
+					<td class="delta{{#if (isAmountNegative this.delta)}} negative{{/if}}">{{#if (isAmountNegative this.commonBalance)}} - {{else}} + {{/if}}{{formatBalance this.delta}}</td>
+				</tr>
+	          {{~/each}}
+			</tbody>
+	        </table>
+		</div>
+
+	    <div id="transaction-history" class="box">
+	        <h1>Transactions history</h1>
+	        <table class="history-list">
+			<tbody>
+	          {{#each transactions~}}
+		        <tr>
+					<td class="action{{#if (isDeposit this.action)}} deposit {{else if (isTransfer this.action)}} transfer {{else}} withdrawal{{/if}}">{{#if (isDeposit this.action)}}+ {{else if (isTransfer this.action)}} ⬌ {{else}} - {{/if}}</td>
+					<td class="amount{{#if (isAmountImportant this.amount)}} large{{/if}}">{{formatBalance this.amount}}</td>
+					<td class="user">{{#if (isTransfer this.action)}} {{this.sender}} 🡒 {{/if}}</td>
+					<td class="user">{{this.username}}</td>
+					<td>{{formatTimestamp this.timestamp}}</td>
+					<td>{{#if (isStackedTransaction this.number)}} (x{{this.number}}) {{else}} {{/if}}</td>
+				</tr>
+	          {{~/each}}
+			</tbody>
+	        </table>
+			<p class="number-of-transactions">Shown {{transactions.length}} transactions on {{totalNumberOfTransactions}} recorded</p>
+	    </div>
+	</div>
 	<div id="additional-info">
 	    <div id="balance" class="box">
 	        <p class="balance-info">Balance: {{formatBalance balance}} ({{calculPercentage balance maxBalance}}%)</p>
