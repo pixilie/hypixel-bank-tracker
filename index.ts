@@ -1,7 +1,7 @@
 import { compile } from "handlebars";
 import "dotenv/config";
 
-const VERSION = 1;
+const VERSION = 2;
 
 const DB_FILE = "data.json";
 
@@ -27,6 +27,7 @@ interface LocalTransaction {
   username: Username;
   sender: Username | null;
   action: TransactionAction;
+  repeatCount: number;
 }
 
 type Uuid = string & { readonly _sym: unique symbol; };
@@ -118,42 +119,38 @@ function getBankLevel(profile: Profile): number {
   return bankMaxCoins;
 }
 
-function absoluteAmount(transaction: LocalTransaction) {
-  switch (transaction.action) {
-    case TransactionAction.Deposit:
-      return transaction.amount;
-    case TransactionAction.Withdraw:
-      return -transaction.amount;
-    case TransactionAction.Transfer:
-      return transaction.amount;
-  }
-}
-
-function mergeTransactions(first: LocalTransaction, second: LocalTransaction): LocalTransaction | null {
+function stackTransactions(first: LocalTransaction, second: LocalTransaction): LocalTransaction | null {
+  // Only stack exact same transaction
   if (first.sender === second.sender
     && first.username === second.username
-    // only merge transactions that are within an hour
-    && Math.abs(first.timestamp - second.timestamp) < 60 * 60 * 1000
-    && first.action !== TransactionAction.Transfer
-    && second.action !== TransactionAction.Transfer) {
-    let newAmount = absoluteAmount(first) + absoluteAmount(second);
+    && first.action === second.action
+    && second.amount === first.amount) {
 
     let outTransaction = first;
-    
-    if (newAmount > 0) {
-      outTransaction.action = TransactionAction.Deposit;
-      outTransaction.amount = newAmount;
-    } else if (newAmount < 0) {
-      outTransaction.action = TransactionAction.Withdraw;
-      outTransaction.amount = -newAmount;
-    } else {
-      return null;
-    }
+    outTransaction.repeatCount += 1;
 
     return outTransaction;
   }
 
   return null;
+}
+
+function calculateUserDelta(db: DataFile): { name: Username, delta: number }[] {
+  let transactions = db.transactions
+    .map((localTransaction) => ({ user: localTransaction.username, amount: localTransaction.amount, timestamp: localTransaction.timestamp }))
+    .reverse();
+
+  let lastTransactionIndex = transactions.findIndex((transaction) => Date.now() - transaction.timestamp >= 24 * 3600 * 1000);
+  let recentTransactions = transactions.slice(0, lastTransactionIndex);
+
+  let usersDelta = new Map<Username, number>();
+
+  for (const recentTransaction of recentTransactions) {
+    const previousAmount = usersDelta.get(recentTransaction.user) ?? 0;
+    usersDelta.set(recentTransaction.user, previousAmount + recentTransaction.amount);
+  }
+
+  return Array.from(usersDelta.entries()).map(([name, delta]) => ({ name, delta }));
 }
 
 async function updateTransactions(profile: Profile) {
@@ -171,6 +168,7 @@ async function updateTransactions(profile: Profile) {
       timestamp,
       username: processDisplayUsername(initiator_name),
       sender: null,
+      repeatCount: 1
     }));
 
 
@@ -182,6 +180,7 @@ async function updateTransactions(profile: Profile) {
       timestamp: Date.now(),
       username: WEIRD_WAYPOINT_USERNAME,
       sender: null,
+      repeatCount: 1
     })
   }
 
@@ -207,14 +206,14 @@ async function updateTransactions(profile: Profile) {
     }
 
     if (lastTransaction) {
-      let mergedTransaction = mergeTransactions(lastTransaction, transaction);
-      if (mergedTransaction) {
-        lastTransaction = mergedTransaction;
+      let stackedTransaction = stackTransactions(lastTransaction, transaction);
+      if (stackedTransaction) {
+        lastTransaction = stackedTransaction;
       } else {
         db.transactions.push(lastTransaction)
         lastTransaction = transaction;
       }
-      
+
     } else {
       lastTransaction = transaction;
     }
@@ -254,7 +253,7 @@ async function renderHtml() {
 
   type UserBalance = { name: Username, commonBalance: number, personalBalance: number };
   type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'transactions' | 'drift'>
-    & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfTransactions: number; bankInterest: number | undefined, allUsers: UserBalance[] }
+    & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfTransactions: number; bankInterest: number | undefined, allUsers: UserBalance[], usersDelta: { name: Username; delta: number; }[] }
   let template = compile<TemplateContext>(await Bun.file("index.html.hbs").text());
 
   let helpers = {
@@ -283,6 +282,7 @@ async function renderHtml() {
     isAmountNegative: (amount: number) => (amount < 0),
     isDriftImportant: (drift: number): boolean => (drift > 1),
     isTransfer: (action: string): boolean => (action === TransactionAction.Transfer),
+    isStackedTransaction: (stackSize: number): boolean => (stackSize >= 2),
   }
 
   let html = template({
@@ -299,7 +299,10 @@ async function renderHtml() {
       .sort((a, b) => b.commonBalance - a.commonBalance)
       .find((user) => user.name === BANK_INTEREST_USERNAME)
       ?.commonBalance,
-    transactions: db.transactions.reverse().slice(0, 50),
+    usersDelta: calculateUserDelta(db)
+      .sort((a, b) => b.delta - a.delta)
+      .filter((user) => user.name != BANK_INTEREST_USERNAME),
+    transactions: db.transactions.reverse().slice(0, 25),
     totalNumberOfTransactions: db.transactions.length,
     lastCheckTimestamp
   }, { helpers });
@@ -313,6 +316,7 @@ async function processTransfer(amount: number, sender: Username, reciever: Usern
     username: reciever,
     action: TransactionAction.Transfer,
     timestamp: Date.now(),
+    repeatCount: 1
   };
 
   console.log(`TSF NEW: ${newTransfer.sender} has ${newTransfer.action} ${newTransfer.amount} to ${newTransfer.username} ¤`)
@@ -331,32 +335,33 @@ async function processTransfer(amount: number, sender: Username, reciever: Usern
   await Bun.write(DB_FILE, JSON.stringify(db));
 }
 
-function migrateMergeTransactions(db: DataFile): DataFile {
-  db.transactions = db.transactions.reduce((acc, transaction) => {
-    let lastTransaction = acc.pop();
-    if (lastTransaction) {
-      let mergedTransaction = mergeTransactions(lastTransaction, transaction)
-      if (mergedTransaction) {
-        acc.push(mergedTransaction);
-      } else {
-        acc.push(lastTransaction);
-        acc.push(transaction);
-      }
-    } else {
-        acc.push(transaction);
-    }
-    return acc;
-  }, [] as LocalTransaction[]);
+function normalizeTransactions(transactions: LocalTransaction[]): LocalTransaction[] {
+  const newFormat: LocalTransaction[] = [];
 
-  return db;
+  for (const transaction of transactions) {
+    const lastTransaction = newFormat[newFormat.length - 1];
+
+    if (
+      lastTransaction &&
+      lastTransaction.username === transaction.username &&
+      lastTransaction.action === transaction.action &&
+      lastTransaction.amount === transaction.amount &&
+      lastTransaction.sender === transaction.sender
+    ) {
+      lastTransaction.repeatCount = (lastTransaction.repeatCount ?? 1) + 1;
+    } else {
+      newFormat.push({ ...transaction, repeatCount: transaction.repeatCount ?? 1 });
+    }
+  }
+
+  return newFormat;
 }
 
 async function runMigrations() {
   let db: DataFile = await Bun.file(DB_FILE).json();
-  if (db.version === 0) {
-    // merge old transactions
-    db = migrateMergeTransactions(db);
-    db.version = 1;
+  if (db.version === 0 || db.version === 1) {
+    db.transactions = normalizeTransactions(db.transactions);
+    db.version = 2;
     await Bun.write(DB_FILE, JSON.stringify(db));
   }
 
