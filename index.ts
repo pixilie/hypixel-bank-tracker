@@ -27,7 +27,7 @@ interface LocalTransaction {
   username: Username;
   sender: Username | null;
   action: TransactionAction;
-  number: number;
+  repeatCount: number;
 }
 
 type Uuid = string & { readonly _sym: unique symbol; };
@@ -127,7 +127,7 @@ function stackTransactions(first: LocalTransaction, second: LocalTransaction): L
     && second.amount === first.amount) {
 
     let outTransaction = first;
-    outTransaction.number += 1;
+    outTransaction.repeatCount += 1;
 
     return outTransaction;
   }
@@ -136,8 +136,8 @@ function stackTransactions(first: LocalTransaction, second: LocalTransaction): L
 }
 
 function calculateUserDelta(db: DataFile): { name: Username, delta: number }[] {
-  let transactions = Object.entries(db.transactions)
-    .map(([_, localTransaction]) => ({ user: localTransaction.username, amount: localTransaction.amount, timestamp: localTransaction.timestamp }))
+  let transactions = db.transactions
+    .map((localTransaction) => ({ user: localTransaction.username, amount: localTransaction.amount, timestamp: localTransaction.timestamp }))
     .reverse();
 
   let lastTransactionIndex = transactions.findIndex((transaction) => Date.now() - transaction.timestamp >= 24 * 3600 * 1000);
@@ -168,7 +168,7 @@ async function updateTransactions(profile: Profile) {
       timestamp,
       username: processDisplayUsername(initiator_name),
       sender: null,
-      number: 1
+      repeatCount: 1
     }));
 
 
@@ -180,7 +180,7 @@ async function updateTransactions(profile: Profile) {
       timestamp: Date.now(),
       username: WEIRD_WAYPOINT_USERNAME,
       sender: null,
-      number: 1
+      repeatCount: 1
     })
   }
 
@@ -283,6 +283,7 @@ async function renderHtml() {
     isDriftImportant: (drift: number): boolean => (drift > 1),
     isTransfer: (action: string): boolean => (action === TransactionAction.Transfer),
     isStackedTransaction: (stackSize: number): boolean => (stackSize >= 2),
+    arePlayersActive: (array: { name: Username; delta: number; }[]): boolean => (array.length > 0),
   }
 
   let html = template({
@@ -316,7 +317,7 @@ async function processTransfer(amount: number, sender: Username, reciever: Usern
     username: reciever,
     action: TransactionAction.Transfer,
     timestamp: Date.now(),
-    number: 1
+    repeatCount: 1
   };
 
   console.log(`TSF NEW: ${newTransfer.sender} has ${newTransfer.action} ${newTransfer.amount} to ${newTransfer.username} ¤`)
@@ -348,9 +349,9 @@ function normalizeTransactions(transactions: LocalTransaction[]): LocalTransacti
       lastTransaction.amount === transaction.amount &&
       lastTransaction.sender === transaction.sender
     ) {
-      lastTransaction.number = (lastTransaction.number ?? 1) + 1;
+      lastTransaction.repeatCount = (lastTransaction.repeatCount ?? 1) + 1;
     } else {
-      newFormat.push({ ...transaction, number: transaction.number ?? 1 });
+      newFormat.push({ ...transaction, repeatCount: transaction.repeatCount ?? 1 });
     }
   }
 

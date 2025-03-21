@@ -13,17 +13,21 @@
 <body>
 <div class="dual">
 	<div id="history">
-		<div id="one-day" class="box">
-		    <h1>One day overview</h1>
-	        <table class="one-day-overview-list">
+		<div id="last-day" class="box">
+		    <h1>Last 24h overview</h1>
+	        <table class="last-day-list">
 			<tbody>
-	          {{#each usersDelta~}}
-		        <tr>
-					<td class="user">{{this.name}}</td>
-					<td class="delta{{#if (isAmountNegative this.delta)}} negative{{/if}}">{{#if (isAmountNegative this.commonBalance)}} - {{else}} + {{/if}}{{formatBalance this.delta}}</td>
-				</tr>
-	          {{~/each}}
-			</tbody>
+				{{#if usersDelta.length}}
+		          	{{#each usersDelta~}}
+			        	<tr>
+							<td class="user">{{this.name}}</td>
+							<td class="delta{{#if (isAmountNegative this.delta)}} negative{{/if}}">{{#if (isAmountNegative this.commonBalance)}}-{{else}}+{{/if}}{{formatBalance this.delta}}</td>
+						</tr>
+		          	{{~/each}}
+				{{else}}
+					<p class="user">No recent activity. Spend money and come back.</p>
+				{{/if}}
+				</tbody>
 	        </table>
 		</div>
 
