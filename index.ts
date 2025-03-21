@@ -283,7 +283,6 @@ async function renderHtml() {
     isDriftImportant: (drift: number): boolean => (drift > 1),
     isTransfer: (action: string): boolean => (action === TransactionAction.Transfer),
     isStackedTransaction: (stackSize: number): boolean => (stackSize >= 2),
-    arePlayersActive: (array: { name: Username; delta: number; }[]): boolean => (array.length > 0),
   }
 
   let html = template({
