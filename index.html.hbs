@@ -21,7 +21,7 @@
 		          	{{#each usersDelta~}}
 			        	<tr>
 							<td class="user">{{this.name}}</td>
-							<td class="delta{{#if (isAmountNegative this.delta)}} negative{{/if}}">{{#if (isAmountNegative this.commonBalance)}}-{{else}}+{{/if}}{{formatBalance this.delta}}</td>
+							<td class="delta{{#if (isAmountNegative this.delta)}} negative{{/if}}">{{#unless (isAmountNegative this.delta)}}+{{/unless}}{{formatBalance this.delta}}</td>
 						</tr>
 		          	{{~/each}}
 				{{else}}

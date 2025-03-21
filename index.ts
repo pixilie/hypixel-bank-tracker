@@ -135,9 +135,14 @@ function stackTransactions(first: LocalTransaction, second: LocalTransaction): L
   return null;
 }
 
+function relativeAmount(transaction: LocalTransaction): number {
+  if (transaction.action === TransactionAction.Withdraw || transaction.action === TransactionAction.Transfer) return -transaction.amount;
+  else return transaction.amount;
+}
+
 function calculateUserDelta(db: DataFile): { name: Username, delta: number }[] {
   let transactions = db.transactions
-    .map((localTransaction) => ({ user: localTransaction.username, amount: localTransaction.amount, timestamp: localTransaction.timestamp }))
+    .map((localTransaction) => ({ user: localTransaction.username, amount: relativeAmount(localTransaction), timestamp: localTransaction.timestamp }))
     .reverse();
 
   let lastTransactionIndex = transactions.findIndex((transaction) => Date.now() - transaction.timestamp >= 24 * 3600 * 1000);
