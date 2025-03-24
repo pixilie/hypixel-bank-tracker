@@ -1,7 +1,10 @@
 {
+  "version": 3,
   "lastTransactionTimestamp": 0,
   "balance": 0,
+  "maxBalance": 0,
   "drift": 0,
+  "bankInterests": 0,
   "users": { },
-  "transactions": []
+  "operations": []
 }

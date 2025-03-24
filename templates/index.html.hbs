@@ -35,11 +35,11 @@
 	        <h1>Transactions history</h1>
 	        <table class="history-list">
 			<tbody>
-	          {{#each transactions~}}
+	          {{#each operations~}}
 		        <tr>
-					<td class="action{{#if (isDeposit this.action)}} deposit {{else if (isTransfer this.action)}} transfer {{else}} withdrawal{{/if}}">{{#if (isDeposit this.action)}}+ {{else if (isTransfer this.action)}} ⬌ {{else}} - {{/if}}</td>
-					<td class="amount{{#if (isAmountImportant this.amount)}} large{{/if}}">{{formatBalance this.amount}}</td>
-					<td class="user">{{#if (isTransfer this.action)}} {{this.sender}} 🡒 {{/if}}</td>
+					<td class="action{{#if (isDeposit this)}} deposit {{else if (isWithdrawal this)}} withdrawal {{else if (isPlayerTransfer this)}} transfer{{/if}}">{{#if (isDeposit this)}}+ {{else if (isWithdrawal this)}} - {{else if (isPlayerTransfer this)}} ⬌ {{/if}}</td>
+					<td class="amount{{#if (isAmountImportant this.amount)}} large{{/if}}">{{formatBalance (absolute this.amount)}}</td>
+					<td class="user">{{#if (isPlayerTransfer this)}} {{this.sender}} 🡒 {{/if}}</td>
 					<td class="user">{{this.username}}</td>
 					<td>{{formatTimestamp this.timestamp}}</td>
 					<td>{{#if (isStackedTransaction this.number)}} (x{{this.number}}) {{else}} {{/if}}</td>
@@ -47,15 +47,15 @@
 	          {{~/each}}
 			</tbody>
 	        </table>
-			<p class="number-of-transactions">Shown {{transactions.length}} transactions on {{totalNumberOfTransactions}} recorded</p>
+			<p class="number-of-transactions">Shown {{operations.length}} transactions on {{totalNumberOfOperations}} recorded</p>
 	    </div>
 	</div>
 	<div id="additional-info">
 	    <div id="balance" class="box">
-	        <p class="balance-info">Balance: {{formatBalance balance}} ({{calculPercentage balance maxBalance}}%)</p>
+	        <p class="balance-info">Balance: {{formatBalance balance}} ({{computePercentage balance maxBalance}}%)</p>
 			<p class="balance-info additional">Max balance: {{formatBalance maxBalance}}</p>
 
-			<p class="balance-info">Interests: {{ formatBalance bankInterest }}</p>
+			<p class="balance-info">Interests: {{ formatBalance bankInterests }}</p>
 			
 			<div class="members">
 		        <h2>Members</h2>
@@ -77,9 +77,10 @@
             <h1>Transfer</h1>
             <form id="transaction-form">
                 <datalist id="users-list">
-                  {{#each allUsers~}}
+                  {{#each users~}}
 		            <option value="{{this.name}}">{{this.name}}</option>
 		          {{~/each}}
+		            <option value="@bank-interest">Bank Interests</option>
                 </datalist>
 
 				<div>
@@ -88,12 +89,12 @@
 				</div>
 
 				<div>
-	                <label for="from-user">From user:</label>
+	                <label for="from-user">From:</label>
 	                <input type="text" list="users-list" id="from-user" name="from-user" required>
 				</div>
 
 				<div>
-	                <label for="to-user">To user:</label>
+	                <label for="to-user">To:</label>
 	                <input type="text" list="users-list" id="to-user" name="to-user" required>
 				</div>
 
