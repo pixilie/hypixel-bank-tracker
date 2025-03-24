@@ -1,9 +1,17 @@
 import { compile } from "handlebars";
+
+// Load `.env` file
 import "dotenv/config";
 
-const VERSION = 2;
-
 const DB_FILE = "data.json";
+const DB_VERSION = 2;
+
+const HYPIXEL_API_KEY = process.env.HYPIXEL_API_KEY!;
+if (!HYPIXEL_API_KEY) throw Error("You need to provide the environnement variable `HYPIXEL_API_KEY`");
+const PROFILE_UUID: Uuid = process.env.PROFILE_UUID! as Uuid
+if (!PROFILE_UUID) throw Error("You need to provide the environnement variable `PROFILE_UUID`");
+const MEMBER_UUID: Uuid = process.env.MEMBER_UUID! as Uuid;
+if (!MEMBER_UUID) throw Error("You need to provide the environnement variable `MEMBER_UUID`");
 
 // Used to indicate maybe missing transactions, and date of drift finding
 const WEIRD_WAYPOINT_USERNAME: Username = "Weird Waypoint" as Username;
@@ -46,12 +54,12 @@ interface Profile {
 
 interface Member {
   leveling: Leveling
-  /* TO FINISH */
+  // non-exhaustive
 }
 
 interface Leveling {
   completed_tasks: Array<string>;
-  /* TO FINISH */
+  // non-exhaustive
 }
 
 interface CommunityUpgrades { /* TODO */ }
@@ -77,11 +85,11 @@ enum TransactionAction {
 let lastCheckTimestamp: number = 0;
 
 async function fetchApi() {
-  console.log(`Fetching fresh information for profile '${process.env.PROFILE_UUID!}'`);
+  console.log(`Fetching fresh information for profile '${PROFILE_UUID}'`);
 
   let url = new URL("https://api.hypixel.net/v2/skyblock/profile");
-  url.searchParams.append("key", process.env.API_KEY!);
-  url.searchParams.append("profile", process.env.PROFILE_UUID!);
+  url.searchParams.append("key", HYPIXEL_API_KEY);
+  url.searchParams.append("profile", PROFILE_UUID);
 
   let data: ProfileResponse = await fetch(url).then((res) => res.json());
   if (!data.success) throw new Error(`There was an error while fetching Hypixel's API: ${data.cause}`);
@@ -89,7 +97,7 @@ async function fetchApi() {
   updateTransactions(data.profile);
   lastCheckTimestamp = Date.now();
 
-  console.log(`Got fresh information for profile '${process.env.PROFILE_UUID!}', reloading clients`);
+  console.log(`Got fresh information for profile '${PROFILE_UUID}', reloading clients`);
 
   server.publish("reload", "reload");
 }
@@ -106,8 +114,7 @@ function getBankLevel(profile: Profile): number {
   };
 
   let bankMaxCoins = 0;
-  let UUID = "050ce16aada3482b8d82e3ee42c6d71b" as Uuid
-  let completedTasks = profile.members[UUID].leveling.completed_tasks
+  let completedTasks = profile.members[MEMBER_UUID].leveling.completed_tasks
 
   completedTasks.forEach((item) => {
     let balance = maxBalance[item];
@@ -256,10 +263,10 @@ function processDisplayUsername(display: StyledUsername): Username {
 async function renderHtml() {
   const db: DataFile = await Bun.file(DB_FILE).json();
 
-  type UserBalance = { name: Username, commonBalance: number, personalBalance: number };
+  type UserBalance = { name: Username, commonBalance: number };
   type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'transactions' | 'drift'>
     & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfTransactions: number; bankInterest: number | undefined, allUsers: UserBalance[], usersDelta: { name: Username; delta: number; }[] }
-  let template = compile<TemplateContext>(await Bun.file("index.html.hbs").text());
+  let template = compile<TemplateContext>(await Bun.file("./templates/index.html.hbs").text());
 
   let helpers = {
     formatBalance(balance: number): string {
@@ -290,20 +297,15 @@ async function renderHtml() {
     isStackedTransaction: (stackSize: number): boolean => (stackSize >= 2),
   }
 
+  let usersWithBalance = Object.entries(db.users)
+      .map(([name, commonBalance]) => ({ name: name as Username, commonBalance }))
+      .sort((a, b) => b.commonBalance - a.commonBalance);
+  
   let html = template({
     ...db,
-    users: Object.entries(db.users)
-      .map(([name, commonBalance]) => ({ name: name as Username, commonBalance, personalBalance: 0 }))
-      .sort((a, b) => b.commonBalance - a.commonBalance)
-      .filter((user) => user.name !== BANK_INTEREST_USERNAME),
-    allUsers: Object.entries(db.users)
-      .map(([name, commonBalance]) => ({ name: name as Username, commonBalance, personalBalance: 0 }))
-      .sort((a, b) => b.commonBalance - a.commonBalance),
-    bankInterest: Object.entries(db.users)
-      .map(([name, commonBalance]) => ({ name: name as Username, commonBalance, personalBalance: 0 }))
-      .sort((a, b) => b.commonBalance - a.commonBalance)
-      .find((user) => user.name === BANK_INTEREST_USERNAME)
-      ?.commonBalance,
+    users: usersWithBalance.filter((user) => user.name !== BANK_INTEREST_USERNAME),
+    bankInterest: usersWithBalance.find((user) => user.name === BANK_INTEREST_USERNAME)?.commonBalance,
+    allUsers: usersWithBalance,
     usersDelta: calculateUserDelta(db)
       .sort((a, b) => b.delta - a.delta)
       .filter((user) => user.name != BANK_INTEREST_USERNAME),
@@ -311,6 +313,7 @@ async function renderHtml() {
     totalNumberOfTransactions: db.transactions.length,
     lastCheckTimestamp
   }, { helpers });
+
   return new Response(html, { headers: { "Content-Type": "text/html" } });
 }
 
@@ -344,16 +347,16 @@ function normalizeTransactions(transactions: LocalTransaction[]): LocalTransacti
   const newFormat: LocalTransaction[] = [];
 
   for (const transaction of transactions) {
-    const lastTransaction = newFormat[newFormat.length - 1];
+    const prevTransaction = newFormat[newFormat.length - 1];
 
     if (
-      lastTransaction &&
-      lastTransaction.username === transaction.username &&
-      lastTransaction.action === transaction.action &&
-      lastTransaction.amount === transaction.amount &&
-      lastTransaction.sender === transaction.sender
+      prevTransaction &&
+      prevTransaction.username === transaction.username &&
+      prevTransaction.action === transaction.action &&
+      prevTransaction.amount === transaction.amount &&
+      prevTransaction.sender === transaction.sender
     ) {
-      lastTransaction.repeatCount = (lastTransaction.repeatCount ?? 1) + 1;
+      prevTransaction.repeatCount = (prevTransaction.repeatCount ?? 1) + 1;
     } else {
       newFormat.push({ ...transaction, repeatCount: transaction.repeatCount ?? 1 });
     }
@@ -364,13 +367,14 @@ function normalizeTransactions(transactions: LocalTransaction[]): LocalTransacti
 
 async function runMigrations() {
   let db: DataFile = await Bun.file(DB_FILE).json();
+
   if (db.version === 0 || db.version === 1) {
     db.transactions = normalizeTransactions(db.transactions);
     db.version = 2;
     await Bun.write(DB_FILE, JSON.stringify(db));
   }
 
-  if (db.version === VERSION) {
+  if (db.version === DB_VERSION) {
     // the database is up-to-date
     return;
   } else {
@@ -386,12 +390,11 @@ const server = Bun.serve({
   async fetch(request, server) {
     const url = new URL(request.url);
     if (url.pathname === "/") return renderHtml();
-    else if (url.pathname === "/styles.css") return new Response(Bun.file("styles.css"));
-    else if (url.pathname === "/script.js") return new Response(Bun.file("script.js"));
-    else if (url.pathname === "/favicon.ico") return new Response(Bun.file("favicon.ico"));
     else if (url.pathname === "/ws") { server.upgrade(request); return; }
-
-    return new Response("404!", { status: 404 });
+    else if (url.pathname === "/styles.css") return new Response(Bun.file("./static/styles.css"));
+    else if (url.pathname === "/script.js") return new Response(Bun.file("./static/script.js"));
+    else if (url.pathname === "/favicon.ico") return new Response(Bun.file("./static/favicon.ico"));
+    else return new Response("404!", { status: 404 });
   },
 
   websocket: {
