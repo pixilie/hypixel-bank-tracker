@@ -179,8 +179,8 @@ function stackTransactions(first: LocalOperation, second: LocalOperation): Local
 }
 
 function calculateUserDelta(operations: LocalOperation[]): { name: Username, delta: number }[] {
-  let lastTransactionLastIndex = operations.findLastIndex((transaction) => Date.now() - transaction.timestamp >= 24 * 3600 * 1000);
-  let recentTransactions = operations.slice(lastTransactionLastIndex);
+  let lastTransactionLastIndex = operations.findLastIndex((transaction) => (Date.now() - transaction.timestamp) >= 24 * 3600 * 1000);
+  let recentTransactions = operations.slice(lastTransactionLastIndex + 1);
 
   let usersDelta = new Map<Username, number>();
 
@@ -338,6 +338,8 @@ async function renderHtml() {
     .map(([name, commonBalance]) => ({ name: name as Username, commonBalance }))
     .sort((a, b) => b.commonBalance - a.commonBalance);
 
+  let operations = db.operations.slice(db.operations.length - 25, db.operations.length).reverse();
+
   let html = template({
     balance: db.balance,
     maxBalance: db.maxBalance,
@@ -345,7 +347,7 @@ async function renderHtml() {
     drift: db.drift,
     lastCheckTimestamp,
     lastTransactionTimestamp: db.lastTransactionTimestamp,
-    operations: db.operations.reverse().slice(0, 25),
+    operations,
     totalNumberOfOperations: db.operations.length,
     usersDelta: calculateUserDelta(db.operations).sort((a, b) => b.delta - a.delta),
     users: usersWithBalance,
@@ -356,7 +358,7 @@ async function renderHtml() {
 
 async function processTransfer(amount: number, sender: Username, reciever: Username) {
   if (sender === reciever) return;
-  
+
   let newTransfer: LocalOperation = {
     amount,
     sender,
