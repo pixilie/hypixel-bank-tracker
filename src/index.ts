@@ -253,6 +253,9 @@ async function updateTransactions(profile: Profile) {
       }
 
       db.users[username] += amount;
+    } else if (transaction.kind === LocalOperationKind.BankInterests) {
+      // SAFETY: just checked the local operation kind
+      db.bankInterests += transaction.amount!;
     }
 
     if (lastTransaction) {
