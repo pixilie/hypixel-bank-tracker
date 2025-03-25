@@ -4,38 +4,66 @@ import { compile } from "handlebars";
 import "dotenv/config";
 
 const DB_FILE = "data.json";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
+
+const db: DataFile = await Bun.file(DB_FILE).json();
+const flushDatabase = () => Bun.write(DB_FILE, JSON.stringify(db));
 
 const HYPIXEL_API_KEY = process.env.HYPIXEL_API_KEY!;
-if (!HYPIXEL_API_KEY) throw Error("You need to provide the environnement variable `HYPIXEL_API_KEY`");
+if (!HYPIXEL_API_KEY) throw new Error("You need to provide the environnement variable `HYPIXEL_API_KEY`");
 const PROFILE_UUID: Uuid = process.env.PROFILE_UUID! as Uuid
-if (!PROFILE_UUID) throw Error("You need to provide the environnement variable `PROFILE_UUID`");
-const MEMBER_UUID: Uuid = process.env.MEMBER_UUID! as Uuid;
-if (!MEMBER_UUID) throw Error("You need to provide the environnement variable `MEMBER_UUID`");
-
-// Used to indicate maybe missing transactions, and date of drift finding
-const WEIRD_WAYPOINT_USERNAME: Username = "Weird Waypoint" as Username;
-
-// Remarquable username to aggregate bank interests
-const BANK_INTEREST_USERNAME: Username = "Bank Interest" as Username;
+if (!PROFILE_UUID) throw new Error("You need to provide the environnement variable `PROFILE_UUID`");
 
 interface DataFile {
   version: number,
+
   lastTransactionTimestamp: number;
+
   balance: number;
   maxBalance: number;
+
   drift: number;
+
+  bankInterests: number;
+
   users: Record<Username, number>;
-  transactions: LocalTransaction[];
+  operations: LocalOperation[];
 }
 
-interface LocalTransaction {
-  amount: number;
+interface LocalOperation {
+  kind: LocalOperationKind;
   timestamp: number;
-  username: Username;
-  sender: Username | null;
-  action: TransactionAction;
-  repeatCount: number;
+
+  amount?: number;
+  username?: Username;
+  // PlayerTransfer operation
+  sender?: Username;
+  repeatCount?: number;
+}
+
+enum LocalOperationKind {
+  /**
+    A player deposit or withdrawal operation from his purse.
+
+    Associated amount is postive when the player deposited the money else negative.
+    */
+  PlayerPurse = "PLAYER_PURSE",
+  /**
+    A money transfer operation between two co-op members.
+    */
+  PlayerTransfer = "PLAYER_TRANSFER",
+
+  /**
+    A cash inflow from bank interests.
+    */
+  BankInterests = "BANK_INTERESTS",
+
+  /**
+    A marker in case 50 transactions were returned by the Hypixel API. That may
+    mean that we missed transactions (indicated by the drift). You have to
+    reconcilliate this by hand.
+    */
+  WeirdWaypoint = "WEIRD_WAYPOINT",
 }
 
 type Uuid = string & { readonly _sym: unique symbol; };
@@ -62,7 +90,9 @@ interface Leveling {
   // non-exhaustive
 }
 
-interface CommunityUpgrades { /* TODO */ }
+interface CommunityUpgrades {
+  // non-exhaustive
+}
 
 interface Banking {
   balance: number;
@@ -79,7 +109,6 @@ interface Transaction {
 enum TransactionAction {
   Deposit = "DEPOSIT",
   Withdraw = "WITHDRAW",
-  Transfer = "TRANSFER"
 }
 
 let lastCheckTimestamp: number = 0;
@@ -114,8 +143,14 @@ function getBankLevel(profile: Profile): number {
   };
 
   let bankMaxCoins = 0;
-  let completedTasks = profile.members[MEMBER_UUID].leveling.completed_tasks
 
+  // SAFETY: we assume a co-op always has at least a member
+  let firstMemberUsername = Object.keys(profile.members)[0] as Uuid;
+  let firstMember = profile.members[firstMemberUsername] as unknown as Member;
+
+  let completedTasks = firstMember.leveling.completed_tasks
+
+  // We search for the best bank upgrade achivement to compute the max bank balance.
   completedTasks.forEach((item) => {
     let balance = maxBalance[item];
     if (balance) {
@@ -126,15 +161,16 @@ function getBankLevel(profile: Profile): number {
   return bankMaxCoins;
 }
 
-function stackTransactions(first: LocalTransaction, second: LocalTransaction): LocalTransaction | null {
+function stackTransactions(first: LocalOperation, second: LocalOperation): LocalOperation | null {
   // Only stack exact same transaction
-  if (first.sender === second.sender
+  if (first.kind === second.kind
+    && second.amount === first.amount
     && first.username === second.username
-    && first.action === second.action
-    && second.amount === first.amount) {
+    && first.sender === second.sender
+  ) {
 
     let outTransaction = first;
-    outTransaction.repeatCount += 1;
+    outTransaction.repeatCount = (first.repeatCount ?? 0) + 1;
 
     return outTransaction;
   }
@@ -142,24 +178,22 @@ function stackTransactions(first: LocalTransaction, second: LocalTransaction): L
   return null;
 }
 
-function relativeAmount(transaction: LocalTransaction): number {
-  if (transaction.action === TransactionAction.Withdraw || transaction.action === TransactionAction.Transfer) return -transaction.amount;
-  else return transaction.amount;
-}
-
-function calculateUserDelta(db: DataFile): { name: Username, delta: number }[] {
-  let transactions = db.transactions
-    .map((localTransaction) => ({ user: localTransaction.username, amount: relativeAmount(localTransaction), timestamp: localTransaction.timestamp }))
-    .reverse();
-
-  let lastTransactionIndex = transactions.findIndex((transaction) => Date.now() - transaction.timestamp >= 24 * 3600 * 1000);
-  let recentTransactions = transactions.slice(0, lastTransactionIndex);
+function calculateUserDelta(operations: LocalOperation[]): { name: Username, delta: number }[] {
+  let lastTransactionLastIndex = operations.findLastIndex((transaction) => (Date.now() - transaction.timestamp) >= 24 * 3600 * 1000);
+  let recentTransactions = operations.slice(lastTransactionLastIndex + 1);
 
   let usersDelta = new Map<Username, number>();
 
   for (const recentTransaction of recentTransactions) {
-    const previousAmount = usersDelta.get(recentTransaction.user) ?? 0;
-    usersDelta.set(recentTransaction.user, previousAmount + recentTransaction.amount);
+    if (recentTransaction.kind === LocalOperationKind.PlayerPurse
+      || recentTransaction.kind === LocalOperationKind.PlayerTransfer) {
+      // SAFETY: we just validated the operation kind
+      let username = recentTransaction.username!;
+      let amount = recentTransaction.amount!;
+
+      const previousAmount = usersDelta.get(username) ?? 0;
+      usersDelta.set(username, previousAmount + amount);
+    }
   }
 
   return Array.from(usersDelta.entries()).map(([name, delta]) => ({ name, delta }));
@@ -168,53 +202,57 @@ function calculateUserDelta(db: DataFile): { name: Username, delta: number }[] {
 async function updateTransactions(profile: Profile) {
   console.log("TSC: Updating");
 
-  const db: DataFile = await Bun.file(DB_FILE).json();
-
   let banking = profile.banking as Banking
 
-  let newTransactions: LocalTransaction[] = banking.transactions
+  let newTransactions: LocalOperation[] = banking.transactions
     .filter((transaction) => transaction.timestamp > (db.lastTransactionTimestamp ?? 0))
-    .map(({ action, amount, initiator_name, timestamp }): LocalTransaction => ({
-      action,
-      amount,
-      timestamp,
-      username: processDisplayUsername(initiator_name),
-      sender: null,
-      repeatCount: 1
-    }));
-
+    .map(({ action, amount, initiator_name, timestamp }): LocalOperation => {
+      let { username, isBankInterest } = processInitiatorName(initiator_name);
+      if (isBankInterest) {
+        return ({
+          kind: LocalOperationKind.BankInterests,
+          timestamp,
+          amount,
+        });
+      } else if (username) {
+        return ({
+          kind: LocalOperationKind.PlayerPurse,
+          amount: action === TransactionAction.Withdraw
+            ? -amount
+            : action === TransactionAction.Deposit
+              ? amount : 0,
+          timestamp,
+          username,
+          repeatCount: 1
+        });
+      } else {
+        throw new Error("Invalid transaction recieved from Hypixel API.")
+      }
+    });
 
   if (newTransactions.length >= 50) {
     console.warn("TSC WARN: there are 50 new transactions, maybe some were not correctly registered");
     newTransactions.push({
-      action: TransactionAction.Deposit,
-      amount: 0,
+      kind: LocalOperationKind.WeirdWaypoint,
       timestamp: Date.now(),
-      username: WEIRD_WAYPOINT_USERNAME,
-      sender: null,
-      repeatCount: 1
     })
   }
 
-  let lastTransaction = db.transactions.pop() ?? null;
+  let lastTransaction = db.operations.pop() ?? null;
 
   for (const transaction of newTransactions) {
-    console.log(`TSC NEW: ${transaction.username} has ${transaction.action} ${transaction.amount} ¤`)
+    console.log(`TSC NEW: ${transaction.username} has ${transaction.kind} ${transaction.amount} ¤`)
 
-    if (!db.users[transaction.username]) {
-      db.users[transaction.username] = 0;
-    }
+    if (transaction.kind === LocalOperationKind.PlayerPurse) {
+      // SAFETY: we just checked the local operation kind
+      let username = transaction.username!;
+      let amount = transaction.amount!;
 
-    switch (transaction.action) {
-      case TransactionAction.Deposit:
-        db.users[transaction.username] += transaction.amount;
-        break;
-      case TransactionAction.Withdraw:
-        db.users[transaction.username] -= transaction.amount;
-        break;
-      case TransactionAction.Transfer:
-        console.error("TSF: Cannot get transfer as a TransactionAction from hypixel")
-        break;
+      if (!db.users[username]) {
+        db.users[username] = 0;
+      }
+
+      db.users[username] += amount;
     }
 
     if (lastTransaction) {
@@ -222,10 +260,9 @@ async function updateTransactions(profile: Profile) {
       if (stackedTransaction) {
         lastTransaction = stackedTransaction;
       } else {
-        db.transactions.push(lastTransaction)
+        db.operations.push(lastTransaction)
         lastTransaction = transaction;
       }
-
     } else {
       lastTransaction = transaction;
     }
@@ -234,38 +271,38 @@ async function updateTransactions(profile: Profile) {
   }
 
   if (lastTransaction) {
-    db.transactions.push(lastTransaction)
+    db.operations.push(lastTransaction)
   }
 
-  let sum = Object.values(db.users).reduce((sum, a) => sum + a, 0);
+  let sum = Object.values(db.users).reduce((balance, userBalance) => balance + userBalance, 0) + db.bankInterests;
   let drift = Math.abs(banking.balance - sum);
   if (drift > 1) console.warn(`TSC DRIFT: found ${drift} between balance (${banking.balance}) and sum (${sum})`)
   db.drift = drift;
   db.balance = banking.balance;
   db.maxBalance = getBankLevel(profile);
 
-  await Bun.write(DB_FILE, JSON.stringify(db));
+  flushDatabase();
 }
 
 // Styled username may have a single mc color code at the start in the case of ranks
-function processDisplayUsername(display: StyledUsername): Username {
-  // Avoid duplicate Bank entity
-  if (display == "Bank Interest (x2)") return BANK_INTEREST_USERNAME;
+function processInitiatorName(initiatorName: StyledUsername): { username?: Username, isBankInterest?: true } {
+  if (initiatorName == "Bank Interest"
+    || initiatorName == "Bank Interest (x2)") {
+    return { isBankInterest: true };
+  }
 
-  if (display.charAt(0) == "§") {
+  if (initiatorName.charAt(0) == "§") {
     // Strip `§a` Minecraft display style tag
-    return display.slice(2) as Username
+    return { username: initiatorName.slice(2) as Username };
   } else {
-    return display as unknown as Username;
+    return { username: initiatorName as unknown as Username };
   }
 }
 
 async function renderHtml() {
-  const db: DataFile = await Bun.file(DB_FILE).json();
-
   type UserBalance = { name: Username, commonBalance: number };
-  type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'transactions' | 'drift'>
-    & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfTransactions: number; bankInterest: number | undefined, allUsers: UserBalance[], usersDelta: { name: Username; delta: number; }[] }
+  type TemplateContext = Pick<DataFile, 'lastTransactionTimestamp' | 'balance' | 'operations' | 'drift' | 'bankInterests' | 'maxBalance'>
+    & { users: UserBalance[]; lastCheckTimestamp: number; totalNumberOfOperations: number; usersDelta: { name: Username; delta: number; }[] }
   let template = compile<TemplateContext>(await Bun.file("./templates/index.html.hbs").text());
 
   let helpers = {
@@ -286,92 +323,76 @@ async function renderHtml() {
         timeZone: "Europe/Paris",
       }).format(timestamp);
     },
-    calculPercentage(balance: number, maxBalance: number): number {
-      return Math.round((balance / maxBalance) * 100)
-    },
-    isDeposit: (action: string): boolean => (action === TransactionAction.Deposit),
+    computePercentage: (balance: number, maxBalance: number): number => Math.round((balance / maxBalance) * 100),
+    absolute: Math.abs,
     isAmountImportant: (amount: number) => (amount >= 5_000_000),
     isAmountNegative: (amount: number) => (amount < 0),
     isDriftImportant: (drift: number): boolean => (drift > 1),
-    isTransfer: (action: string): boolean => (action === TransactionAction.Transfer),
-    isStackedTransaction: (stackSize: number): boolean => (stackSize >= 2),
+    isWithdrawal: (operation: LocalOperation): boolean => operation.kind === LocalOperationKind.PlayerPurse && operation.amount! < 0,
+    isDeposit: (operation: LocalOperation): boolean => operation.kind === LocalOperationKind.PlayerPurse && operation.amount! > 0,
+    isPlayerTransfer: (operation: LocalOperation): boolean => (operation.kind === LocalOperationKind.PlayerTransfer),
+    isStackedTransaction: (stackSize: number): boolean => (stackSize > 1),
   }
 
   let usersWithBalance = Object.entries(db.users)
-      .map(([name, commonBalance]) => ({ name: name as Username, commonBalance }))
-      .sort((a, b) => b.commonBalance - a.commonBalance);
-  
+    .map(([name, commonBalance]) => ({ name: name as Username, commonBalance }))
+    .sort((a, b) => b.commonBalance - a.commonBalance);
+
+  let operations = db.operations.slice(db.operations.length - 25, db.operations.length).reverse();
+
   let html = template({
-    ...db,
-    users: usersWithBalance.filter((user) => user.name !== BANK_INTEREST_USERNAME),
-    bankInterest: usersWithBalance.find((user) => user.name === BANK_INTEREST_USERNAME)?.commonBalance,
-    allUsers: usersWithBalance,
-    usersDelta: calculateUserDelta(db)
-      .sort((a, b) => b.delta - a.delta)
-      .filter((user) => user.name != BANK_INTEREST_USERNAME),
-    transactions: db.transactions.reverse().slice(0, 25),
-    totalNumberOfTransactions: db.transactions.length,
-    lastCheckTimestamp
+    balance: db.balance,
+    maxBalance: db.maxBalance,
+    bankInterests: db.bankInterests,
+    drift: db.drift,
+    lastCheckTimestamp,
+    lastTransactionTimestamp: db.lastTransactionTimestamp,
+    operations,
+    totalNumberOfOperations: db.operations.length,
+    usersDelta: calculateUserDelta(db.operations).sort((a, b) => b.delta - a.delta),
+    users: usersWithBalance,
   }, { helpers });
 
   return new Response(html, { headers: { "Content-Type": "text/html" } });
 }
 
 async function processTransfer(amount: number, sender: Username, reciever: Username) {
-  let newTransfer: LocalTransaction = {
+  if (sender === reciever) return;
+
+  let newTransfer: LocalOperation = {
     amount,
     sender,
     username: reciever,
-    action: TransactionAction.Transfer,
+    kind: LocalOperationKind.PlayerTransfer,
     timestamp: Date.now(),
-    repeatCount: 1
   };
 
-  console.log(`TSF NEW: ${newTransfer.sender} has ${newTransfer.action} ${newTransfer.amount} to ${newTransfer.username} ¤`)
+  console.log(`TSF NEW: ${newTransfer.sender} has ${newTransfer.kind} ${newTransfer.amount} to ${newTransfer.username} ¤`)
 
-  const db: DataFile = await Bun.file(DB_FILE).json();
+  if (sender === "@bank-interest" || reciever === "@bank-interest") {
+    throw new Error("not implemented");
+  };
 
-  // Initalize users if not already done
-  if (!db.users[newTransfer.sender!]) db.users[newTransfer.sender!] = 0;
-  if (!db.users[newTransfer.username]) db.users[newTransfer.username] = 0;
-
-  db.users[newTransfer.sender!] -= amount
-  db.users[newTransfer.username] += amount
-  db.lastTransactionTimestamp = newTransfer.timestamp;
-  db.transactions = db.transactions.concat([newTransfer]);
-
-  await Bun.write(DB_FILE, JSON.stringify(db));
-}
-
-function normalizeTransactions(transactions: LocalTransaction[]): LocalTransaction[] {
-  const newFormat: LocalTransaction[] = [];
-
-  for (const transaction of transactions) {
-    const prevTransaction = newFormat[newFormat.length - 1];
-
-    if (
-      prevTransaction &&
-      prevTransaction.username === transaction.username &&
-      prevTransaction.action === transaction.action &&
-      prevTransaction.amount === transaction.amount &&
-      prevTransaction.sender === transaction.sender
-    ) {
-      prevTransaction.repeatCount = (prevTransaction.repeatCount ?? 1) + 1;
-    } else {
-      newFormat.push({ ...transaction, repeatCount: transaction.repeatCount ?? 1 });
-    }
+  if (!Object.keys(db.users).includes(sender) || !Object.keys(db.users).includes(reciever)) {
+    throw new Error("User does not exist");
   }
 
-  return newFormat;
+  db.users[newTransfer.username!] += amount
+  db.users[newTransfer.sender!] -= amount
+
+  db.lastTransactionTimestamp = newTransfer.timestamp;
+  db.operations.push(newTransfer);
 }
 
 async function runMigrations() {
   let db: DataFile = await Bun.file(DB_FILE).json();
 
   if (db.version === 0 || db.version === 1) {
-    db.transactions = normalizeTransactions(db.transactions);
-    db.version = 2;
-    await Bun.write(DB_FILE, JSON.stringify(db));
+    throw new Error("database file version is too old");
+  }
+
+  if (db.version === 2) {
+    throw new Error("no migration yet");
   }
 
   if (db.version === DB_VERSION) {

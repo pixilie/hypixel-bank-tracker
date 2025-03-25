@@ -74,8 +74,8 @@ transferForm.addEventListener("submit", async (ev) => {
   let amount = parseInt(form.get("amount"));
   let fromUser = form.get("from-user");
   let toUser = form.get("to-user");
+
   let userList = Array.from(dataList.options).map((elt) => elt.label)
-  console.log(userList)
 
   if (amount <= 0) {
     logsSpan.innerText = "Invalid amount: Must be greater than 0."
