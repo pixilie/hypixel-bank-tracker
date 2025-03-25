@@ -356,7 +356,7 @@ async function renderHtml() {
   return new Response(html, { headers: { "Content-Type": "text/html" } });
 }
 
-async function processTransfer(amount: number, sender: Username, reciever: Username) {
+function processTransfer(amount: number, sender: Username, reciever: Username) {
   if (sender === reciever) return;
 
   let newTransfer: LocalOperation = {
@@ -384,9 +384,7 @@ async function processTransfer(amount: number, sender: Username, reciever: Usern
   db.operations.push(newTransfer);
 }
 
-async function runMigrations() {
-  let db: DataFile = await Bun.file(DB_FILE).json();
-
+function runMigrations() {
   if (db.version === 0 || db.version === 1) {
     throw new Error("database file version is too old");
   }
@@ -404,7 +402,7 @@ async function runMigrations() {
 }
 
 // Startup
-await runMigrations();
+runMigrations();
 
 // Server
 const server = Bun.serve({
@@ -432,7 +430,8 @@ const server = Bun.serve({
         let fromUser = args[2] as Username;
         let toUser = args[3] as Username;
 
-        await processTransfer(amount, fromUser, toUser);
+        processTransfer(amount, fromUser, toUser);
+        flushDatabase()
         server.publish("reload", "reload");
       } else {
         console.error(`WS: unknown message ${message}`);
