@@ -1,43 +1,69 @@
-use core::panic;
-use std::collections::HashMap;
+use std::{
+	collections::HashMap,
+	time::{SystemTime, UNIX_EPOCH},
+};
 
-use crate::models::Profile;
+use reqwest::header::USER_AGENT;
 
-pub(crate) fn get_max_balance(profile: Profile) -> u64 {
-	let bank_upgrades: HashMap<&str, u64> = [
-		("BANK_UPGRADE_STARTER", 5_000_000),
-		("BANK_UPGRADE_GOLD", 100_000_000),
-		("BANK_UPGRADE_DELUXE", 250_000_000),
-		("BANK_UPGRADE_SUPER_DELUXE", 500_000_000),
-		("BANK_UPGRADE_PREMIER", 1_000_000_000),
-		("BANK_UPGRADE_LUXURIOUS", 6_000_000_000),
-		("BANK_UPGRADE_PALATIAL", 60_000_000_000),
-	]
-	.iter()
-	.cloned()
-	.collect();
+use crate::{models::Profile, Operation, Username};
 
-	let mut active_uuid = match profile.members.keys().next() {
-		Some(uuid) => uuid,
-		None => panic!("An error occured while retreiving the first member of the coop"),
-	};
+pub(crate) fn get_max_balance(profile: &Profile) -> Option<u64> {
+	let mut bank_level = HashMap::new();
+	// bank_level.from([
 
-	profile.members.iter().for_each(|(uuid, member)| {
-		member.leveling.completed_tasks.iter().for_each(|task| {
-			if bank_upgrades.contains_key(task.as_str()) {
-				active_uuid = uuid
-			}
+	// ]);
+	bank_level.insert("BANK_UPGRADE_STARTER", 5_000_000);
+	bank_level.insert("BANK_UPGRADE_GOLD", 100_000_000);
+	bank_level.insert("BANK_UPGRADE_DELUXE", 250_000_000);
+	bank_level.insert("BANK_UPGRADE_SUPER_DELUXE", 500_000_000);
+	bank_level.insert("BANK_UPGRADE_PREMIER", 1_000_000_000);
+	bank_level.insert("BANK_UPGRADE_LUXURIOUS", 6_000_000_000);
+	bank_level.insert("BANK_UPGRADE_PALATIAL", 60_000_000_000);
+
+	profile
+		.members
+		.values()
+		.filter_map(|member| {
+			member
+				.leveling
+				.completed_tasks
+				.iter()
+				.filter_map(|task| bank_level.get(task.as_str()))
+				.max()
 		})
-	});
+		.max()
+		.copied()
+}
 
-	let completed_tasks = match profile.members.get(active_uuid) {
-		Some(member) => &member.leveling.completed_tasks,
-		None => panic!("No users found in coop"),
-	};
+fn process_user_balance_evolution(operations: Vec<(u128, Operation)>) -> Vec<(Username, f64)> {
+	let current = SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.unwrap()
+		.as_millis();
 
-	completed_tasks.iter().fold(0, |max_balance, item| {
-		bank_upgrades
-			.get(item.as_str())
-			.map_or(max_balance, |&value| max_balance.max(value))
-	})
+	let recent_transactions = operations
+		.into_iter()
+		.take_while(|(timestamp, _)| current - timestamp > 24 * 3600 * 1000)
+		.fold(HashMap::new(), |mut delta_hm, (_, operation)| {
+			match operation {
+				Operation::PlayerPurse {
+					amount, username, ..
+				} => {
+					*delta_hm.entry(username).or_insert(0.0) += amount;
+				}
+				Operation::PlayerTransfer {
+					amount,
+					receiver,
+					sender,
+					..
+				} => {
+					*delta_hm.entry(receiver).or_insert(0.0) += amount;
+					*delta_hm.entry(sender).or_insert(0.0) -= amount;
+				}
+				_ => {}
+			}
+			delta_hm
+		});
+
+	recent_transactions.into_iter().collect()
 }

@@ -1,12 +1,10 @@
 #![allow(dead_code)]
 
-use core::panic;
 use dotenvy::{self, var};
 use helpers::get_max_balance;
-use models::{Banking, Config, Profile, ProfileResponse, Username};
+use models::{Banking, Config, Profile, ProfileResponse, Transaction, Username};
 use reqwest::blocking::Client;
-use serde::Deserialize;
-use serde_json::from_str;
+use serde::{Deserialize, Serialize};
 use std::{
 	collections::HashMap,
 	fmt::Display,
@@ -21,19 +19,19 @@ mod models;
 const DB_FILE: &str = "data.json";
 const DB_VERSION: u64 = 3;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct DataFile {
 	version: u64,
 	last_transaction_timestamp: u128,
 	balance: f64,
 	drift: f64,
-	max_balance: u64,
+	max_balance: Option<u64>,
 	bank_interests: f64,
 	users: HashMap<Username, f64>,
 	operations: Vec<(u128, Operation)>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "type")]
 pub(crate) enum Operation {
 	PlayerPurse {
@@ -57,9 +55,7 @@ impl Display for Operation {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
 			Self::PlayerPurse {
-				amount,
-				username,
-				repeat_count,
+				amount, username, ..
 			} => write!(
 				f,
 				"TSC NEW: {} has {} {} ¤",
@@ -71,23 +67,28 @@ impl Display for Operation {
 				amount,
 				receiver,
 				sender,
-				repeat_count,
+				..
 			} => write!(
 				f,
-				"TSF NEW: {} has transfered {} coins to {}",
-				sender, amount, receiver
+				"TSF NEW: {sender} has transfered {amount} coins to {receiver}"
 			),
-			Self::WeirdWaypoint => writeln!(f, "Weirdwaypoint"),
-			Self::BankInterests { amount } => writeln!(f, "BANK INTEREST: {} ¤", amount),
+			Self::WeirdWaypoint => write!(f, "Weirdwaypoint"),
+			Self::BankInterests { amount } => write!(f, "BANK INTEREST: {amount} ¤"),
 		}
 	}
 }
 
 fn load_database(file_path: &str) -> DataFile {
 	let content = fs::read_to_string(file_path).expect("Should have been able to read the file");
-	let database = from_str::<DataFile>(content.as_str());
+	let database = serde_json::from_str::<DataFile>(content.as_str());
 
 	database.unwrap()
+}
+
+fn write_database(database: &DataFile) {
+	let database_json = serde_json::to_string(&database)
+		.expect("An error occured while parsing Datafile into json");
+	fs::write(DB_FILE, database_json).expect("An error occured while writing into the json file");
 }
 
 fn load_config_from_env() -> Config {
@@ -97,16 +98,11 @@ fn load_config_from_env() -> Config {
 	}
 }
 
-fn fetch_api(config: Config, client: Client, database: &mut DataFile) -> Profile {
+fn fetch_api(config: &Config, client: &Client) -> Profile {
 	println!(
 		"Fetching fresh information for profile {0}",
 		config.profile_uuid
 	);
-
-	database.last_transaction_timestamp = SystemTime::now()
-		.duration_since(UNIX_EPOCH)
-		.expect("...")
-		.as_millis();
 
 	let mut url = Url::parse("https://api.hypixel.net/v2/skyblock/profile").unwrap();
 	url.query_pairs_mut()
@@ -126,7 +122,7 @@ fn fetch_api(config: Config, client: Client, database: &mut DataFile) -> Profile
 	response.profile
 }
 
-fn update_transaction(profile: Profile, database: &mut DataFile) {
+fn update_transaction(profile: &Profile, database: &mut DataFile) {
 	println!("TSC: Updating");
 
 	let banking: Banking = profile.clone().banking;
@@ -134,49 +130,58 @@ fn update_transaction(profile: Profile, database: &mut DataFile) {
 	let mut new_transactions = banking
 		.transactions
 		.into_iter()
-		// CHECK: Transacction filtering order
 		.take_while(|transaction| transaction.timestamp > database.last_transaction_timestamp)
-		.map(|transaction| match transaction.action {
-			models::TransactionAction::Deposit => match transaction.initiator_name.as_str() {
-				"Bank Interest" | "Bank Interest (x2)" => Operation::BankInterests {
-					amount: transaction.amount,
-				},
-				_ => Operation::PlayerPurse {
-					amount: transaction.amount,
-					username: transaction.initiator_name,
-					repeat_count: 1,
-				},
+		.map(
+			|Transaction {
+			     amount,
+			     initiator_name,
+			     timestamp,
+			     action,
+			 }| {
+				let operation = match action {
+					models::TransactionAction::Deposit => {
+						if let "Bank Interest" | "Bank Interest (x2)" = initiator_name.as_str() {
+							Operation::BankInterests { amount }
+						} else {
+							Operation::PlayerPurse {
+								amount,
+								username: Username::new(initiator_name),
+								repeat_count: 1,
+							}
+						}
+					}
+					models::TransactionAction::Withdraw => Operation::PlayerPurse {
+						amount: -amount,
+						username: Username::new(initiator_name),
+						repeat_count: 1,
+					},
+				};
+
+				(timestamp, operation)
 			},
-			models::TransactionAction::Withdraw => Operation::PlayerPurse {
-				amount: -transaction.amount,
-				username: transaction.initiator_name,
-				repeat_count: 1,
-			},
-		})
+		)
 		.collect::<Vec<_>>();
 
 	if new_transactions.len() > 50 {
 		println!(
 			"TSC WARN: there are 50 new transactions, maybe some were not correctly registered"
 		);
-		new_transactions.push(Operation::WeirdWaypoint);
+		new_transactions.push((
+			SystemTime::now()
+				.duration_since(UNIX_EPOCH)
+				.unwrap()
+				.as_millis(),
+			Operation::WeirdWaypoint,
+		));
 	}
 
-	let last_transaction_timestamp = SystemTime::now()
-		.duration_since(UNIX_EPOCH)
-		.expect("...")
-		.as_millis();
-
-	for new_transaction in new_transactions {
-		println!("{new_transaction}");
-
-		match new_transaction {
+	for (timestamp, operation) in new_transactions {
+		println!("{operation}");
+		match &operation {
 			Operation::PlayerPurse {
-				amount,
-				username,
-				repeat_count,
+				amount, username, ..
 			} => {
-				let user_balance = database.users.entry(username).or_insert(0.0);
+				let user_balance = database.users.entry(username.clone()).or_insert(0.0);
 				*user_balance += amount;
 			}
 
@@ -188,41 +193,30 @@ fn update_transaction(profile: Profile, database: &mut DataFile) {
 				amount,
 				receiver,
 				sender,
-				repeat_count,
+				..
 			} => {
 				//TODO: Transfer with bank interests
 				if (sender == receiver)
-					| !database.users.contains_key(&sender)
-					| !database.users.contains_key(&receiver)
+					| !database.users.contains_key(sender)
+					| !database.users.contains_key(receiver)
 				{
-					return;
+					panic!("An error occured with the users concerned by the transfer");
 				}
 
-				match database.users.get_disjoint_mut([&sender, &receiver]) {
-					[Some(sender_balance), Some(receiver_balance)] => {
-						*sender_balance -= amount;
-						*receiver_balance += amount
-					}
-					_ => panic!("An error occured"),
-				}
+				let [Some(sender_balance), Some(receiver_balance)] =
+					database.users.get_disjoint_mut([sender, receiver])
+				else {
+					panic!("An error occured while writing the transfer in the database");
+				};
 
-				database.operations.push((
-					last_transaction_timestamp,
-					Operation::PlayerTransfer {
-						amount,
-						receiver,
-						sender,
-						repeat_count,
-					},
-				));
+				*sender_balance -= amount;
+				*receiver_balance += amount;
 			}
 
-			Operation::WeirdWaypoint => {
-				database
-					.operations
-					.push((last_transaction_timestamp, Operation::WeirdWaypoint));
-			}
+			Operation::WeirdWaypoint => {}
 		}
+
+		database.operations.push((timestamp, operation));
 	}
 
 	let sum: f64 = database.users.clone().into_values().sum();
@@ -235,7 +229,11 @@ fn update_transaction(profile: Profile, database: &mut DataFile) {
 		);
 	}
 
-	database.last_transaction_timestamp = last_transaction_timestamp;
+	database.last_transaction_timestamp = SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.unwrap()
+		.as_millis();
+
 	database.drift = drift;
 	database.max_balance = get_max_balance(profile);
 }
@@ -245,6 +243,7 @@ fn main() {
 	let mut database = load_database(DB_FILE);
 	let client = reqwest::blocking::Client::new();
 
-	let new_profile = fetch_api(config, client, &mut database);
-	update_transaction(new_profile, &mut database);
+	let new_profile = fetch_api(&config, &client);
+	update_transaction(&new_profile, &mut database);
+	write_database(&database);
 }
