@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use dotenvy::{self, var};
-use helpers::get_max_balance;
+use helpers::{get_max_balance, handle_connection};
 use models::{Banking, Config, Profile, ProfileResponse, Transaction, Username};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
@@ -9,12 +9,15 @@ use std::{
 	collections::HashMap,
 	fmt::Display,
 	fs,
+	net::TcpListener,
 	time::{SystemTime, UNIX_EPOCH},
 };
+use thread::ThreadPool;
 use url::Url;
 
 mod helpers;
 mod models;
+mod thread;
 
 const DB_FILE: &str = "data.json";
 const DB_VERSION: u64 = 3;
@@ -236,14 +239,29 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 
 	database.drift = drift;
 	database.max_balance = get_max_balance(profile);
+	database.balance = banking.balance;
 }
 
 fn main() {
+	let pool = ThreadPool::new(4);
+	let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+
 	let config = load_config_from_env();
 	let mut database = load_database(DB_FILE);
 	let client = reqwest::blocking::Client::new();
 
-	let new_profile = fetch_api(&config, &client);
-	update_transaction(&new_profile, &mut database);
-	write_database(&database);
+	pool.execute(move || {
+		let new_profile = fetch_api(&config, &client);
+
+		update_transaction(&new_profile, &mut database);
+		write_database(&database);
+	});
+
+	for stream in listener.incoming() {
+		let stream = stream.unwrap();
+
+		pool.execute(|| {
+			handle_connection(stream);
+		});
+	}
 }
