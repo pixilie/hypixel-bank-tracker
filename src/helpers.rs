@@ -33,14 +33,17 @@ pub(crate) fn get_max_balance(profile: &Profile) -> Option<u64> {
 		.copied()
 }
 
-fn process_user_balance_evolution(operations: Vec<(u128, Operation)>) -> Vec<(Username, f64)> {
+pub(crate) fn process_user_balance_evolution(
+	operations: &Vec<(u128, Operation)>,
+	user: &Username,
+) -> f64 {
 	let current = SystemTime::now()
 		.duration_since(UNIX_EPOCH)
 		.unwrap()
 		.as_millis();
 
 	let recent_transactions = operations
-		.into_iter()
+		.iter()
 		.take_while(|(timestamp, _)| current - timestamp > 24 * 3600 * 1000)
 		.fold(HashMap::new(), |mut delta_hm, (_, operation)| {
 			match operation {
@@ -63,5 +66,5 @@ fn process_user_balance_evolution(operations: Vec<(u128, Operation)>) -> Vec<(Us
 			delta_hm
 		});
 
-	recent_transactions.into_iter().collect()
+	recent_transactions.get(&user).map_or(0.0, |value| *value)
 }

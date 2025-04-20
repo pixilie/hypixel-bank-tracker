@@ -1,5 +1,6 @@
 #![allow(dead_code)]
 use askama::Template;
+use chrono::{Local, TimeZone};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display};
 
@@ -113,4 +114,35 @@ pub(crate) struct BankerTemplate {
 	pub(crate) last_transaction_timestamp: u128,
 	pub(crate) drift: f64,
 	pub(crate) total_operations: usize,
+}
+
+// TODO: fix type when askama type fixed
+impl BankerTemplate {
+	fn format_number(&self, n: &f64) -> String {
+		let rounded = n.round();
+		let int_part = rounded.to_string();
+
+		let spaced_int = int_part
+			.chars()
+			.rev()
+			.collect::<Vec<_>>()
+			.chunks(3)
+			.map(|chunk| chunk.iter().collect::<String>())
+			.collect::<Vec<_>>()
+			.join(" ")
+			.chars()
+			.rev()
+			.collect::<String>();
+
+		spaced_int
+	}
+
+	fn format_timestamp(&self, ts: &u128) -> String {
+		if let Ok(secs) = i64::try_from(*ts / 1000) {
+			if let Some(datetime) = Local.timestamp_opt(secs, 0).single() {
+				return datetime.format("%H:%M %d/%m").to_string();
+			}
+		}
+		String::from("Invalid timestamp")
+	}
 }

@@ -2,7 +2,7 @@
 
 use askama::Template;
 use dotenvy::{self, var};
-use helpers::get_max_balance;
+use helpers::{get_max_balance, process_user_balance_evolution};
 use models::{
 	BankerTemplate, Banking, Config, Profile, ProfileResponse, Transaction, User, Username,
 };
@@ -137,7 +137,7 @@ fn fetch_api(config: &Config, client: &Client, database: &mut DataFile) -> Profi
 }
 
 fn update_transaction(profile: &Profile, database: &mut DataFile) {
-	println!("TSC: Updating");
+	println!("TSC: Updating...");
 
 	let banking: Banking = profile.clone().banking;
 
@@ -178,7 +178,7 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 
 	if new_transactions.len() > 50 {
 		println!(
-			"TSC WARN: there are 50 new transactions, maybe some were not correctly registered"
+			"TSC: Updated, there are 50 new transactions, maybe some were not correctly registered"
 		);
 		new_transactions.push((
 			SystemTime::now()
@@ -187,6 +187,10 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 				.as_millis(),
 			Operation::WeirdWaypoint,
 		));
+	} else if new_transactions.is_empty() {
+		println!("TSC: Updated, no new transactions");
+	} else {
+		println!("TSC: Updated, {} new transactions", new_transactions.len());
 	}
 
 	for (timestamp, operation) in new_transactions {
@@ -230,10 +234,11 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 			Operation::WeirdWaypoint => {}
 		}
 
+		database.last_transaction_timestamp = timestamp;
 		database.operations.push((timestamp, operation));
 	}
 
-	let sum: f64 = database.users.clone().into_values().sum();
+	let sum = database.users.clone().into_values().sum::<f64>() + database.bank_interests;
 	let drift = (banking.balance - sum).abs();
 
 	if drift > 1.0 {
@@ -243,26 +248,49 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 		);
 	}
 
-	database.last_transaction_timestamp = SystemTime::now()
-		.duration_since(UNIX_EPOCH)
-		.unwrap()
-		.as_millis();
-
 	database.drift = drift;
 	database.max_balance = get_max_balance(profile);
 	database.balance = banking.balance;
 }
 
-pub(crate) fn handle_connection(mut stream: TcpStream, template: Arc<BankerTemplate>) {
-	let _ = BufReader::new(&stream)
-		.lines()
-		.map(|result| result.unwrap())
-		.take_while(|line| !line.is_empty())
-		.collect::<Vec<_>>();
+pub(crate) fn handle_connection(mut stream: TcpStream, template: &Arc<BankerTemplate>) {
+	let reader = BufReader::new(&stream);
+	let request_line = reader.lines().next().unwrap().unwrap();
+	let request_path = request_line.split_whitespace().nth(1).unwrap_or("/");
 
-	template.render().unwrap();
-	let response = "HTTP/1.1 200 OK\r\n\r\n";
-	stream.write_all(response.as_bytes()).unwrap();
+	if request_path.starts_with("/static/") {
+		let file_path = format!(".{request_path}");
+		if let Ok(contents) = fs::read(&file_path) {
+			let content_type = match file_path.rsplit('.').next().unwrap_or("") {
+				"css" => "text/css",
+				"js" => "application/javascript",
+				"png" => "image/png",
+				"jpg" | "jpeg" => "image/jpeg",
+				_ => "application/octet-stream",
+			};
+
+			let response = format!(
+				"HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n",
+				content_type,
+				contents.len()
+			);
+
+			stream.write_all(response.as_bytes()).unwrap();
+			stream.write_all(&contents).unwrap();
+		} else {
+			let response = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
+			stream.write_all(response.as_bytes()).unwrap();
+		}
+	} else {
+		let body = template.as_ref().render().unwrap();
+		let response = format!(
+            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: {}\r\n\r\n{}",
+            body.len(),
+            body
+        );
+
+		stream.write_all(response.as_bytes()).unwrap();
+	}
 }
 
 fn main() {
@@ -273,18 +301,17 @@ fn main() {
 	let mut database = load_database(DB_FILE);
 	let client = reqwest::blocking::Client::new();
 
-	let users = database
+	let mut users = database
 		.users
 		.clone()
 		.into_iter()
 		.map(|(username, balance)| User {
-			name: username,
+			name: username.clone(),
 			balance,
-			delta: balance,
+			delta: process_user_balance_evolution(&database.operations, &username),
 		})
-		.collect();
-
-	let operations_sample = database.operations.iter().take(25).cloned().collect();
+		.collect::<Vec<_>>();
+	users.sort_by(|a, b| b.balance.total_cmp(&a.balance));
 
 	let completion_percentage = format!(
 		"{:.2}%",
@@ -293,7 +320,7 @@ fn main() {
 
 	let template = BankerTemplate {
 		users,
-		operations: operations_sample,
+		operations: database.operations.iter().rev().take(25).cloned().collect(),
 		bank_interests: database.bank_interests,
 		balance: database.balance,
 		max_balance: database.max_balance.unwrap(),
@@ -317,8 +344,8 @@ fn main() {
 		let stream = stream.unwrap();
 		let template = Arc::clone(&template);
 
-		pool.execute(|| {
-			handle_connection(stream, template);
+		pool.execute(move || {
+			handle_connection(stream, &template);
 		});
 	}
 }
