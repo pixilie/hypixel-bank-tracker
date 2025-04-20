@@ -21,8 +21,9 @@
             {% for user in users %}
             <tr>
               <td class="user">{{user.name}}</td>
-              <td class="delta{% if user.delta < 0.0 %}negative{% endif %}">{% if user.delta > 0.0 %}+{% endif
-                %}{{user.delta}}</td>
+              <td class="delta{% if user.delta < 0.0 %} negative{% endif %}">
+                {% if user.delta > 0.0 %}+{% endif %} {{user.delta}}
+              </td>
             </tr>
             {% endfor %}
           </tbody>
@@ -36,35 +37,34 @@
             <tr>
               {% for (timestamp, operation) in operations %}
               {% match operation %}
-              {% when Operation::PlayerPurse {amount, username, repeat_count} %}
-              <td class="action{% if amount > 0.0 %} deposit{% else %} withdrawal{% endif %}">{% if
-                amount > 0.0 %} + {% else %} - {% endif %}</td>
-              <td class="amount{% if amount > 5_000_000.0 %} large{% endif %}">{{amount}}</td>
-              <td class="user">{{username}}</td>
-              <td>{{timestamp}}</td>
+                {% when Operation::PlayerPurse {amount, username, repeat_count} %}
+                  <td class="action{% if amount > crate::models::ZERO_REF %} deposit{% else %} withdrawal{% endif %}">
+                    {% if amount > crate::models::ZERO_REF %} + {% else %} - {% endif %}</td>
+                  <td class="amount{% if amount > crate::models::FIVE_M_REF %} large{% endif %}">{{amount}}</td>
+                  <td class="user">{{username}}</td>
+                  <td>{{timestamp}}</td>
 
-              {% when Operation::BankInterests {amount} %}
-              <td class="action deposit">+</td>
-              <td class="amount{% if amount > 5_000_000.0 %} large{% endif %}">{{amount}}</td>
-              <td class="user">Bank Interests</td>
-              <td>{{timestamp}}</td>
+                {% when Operation::BankInterests {amount} %}
+                  <td class="action deposit">+</td>
+                  <td class="amount{% if amount > crate::models::FIVE_M_REF %} large{% endif %}">{{amount}}</td>
+                  <td class="user">Bank Interests</td>
+                  <td>{{timestamp}}</td>
 
-              {% when Operation::PlayerTransfer {amount, receiver, sender, repeat_count} %}
-              <td class="action transfer">⬌</td>
-              <td class="amount{% if amount > 5_000_000.0 %} large{% endif %}">{{amount}}</td>
-              <td class="user">{{sender}}</td>
-              <td class="user">{receiver}}</td>
-              <td>{{timestamp}}</td>
+                {% when Operation::PlayerTransfer {amount, receiver, sender, repeat_count} %}
+                  <td class="action transfer">⬌</td>
+                  <td class="amount{% if amount > crate::models::FIVE_M_REF %} large{% endif %}">{{amount}}</td>
+                  <td class="user">{{sender}}</td>
+                  <td class="user">{{receiver}}</td>
+                  <td>{{timestamp}}</td>
 
-
-              {% when Operation::WeirdWaypoint %}
-              <td class="action transfer">⬌</td>
-              <td class="amount">Warning</td>
-              <td class="user">Weird waypoint</td>
-              <td>{{timestamp}}</td>
+                {% when Operation::WeirdWaypoint %}
+                  <td class="action transfer">⬌</td>
+                  <td class="amount">Warning</td>
+                  <td class="user">Weird waypoint</td>
+                  <td>{{timestamp}}</td>
               {% endmatch %}
+              {% endfor %}
             </tr>
-            {% endfor %}
           </tbody>
         </table>
         {% let recent_operations = operations.len() %}
@@ -128,7 +128,7 @@
         <h1>Technical informations</h1>
         <p>Last check: {{last_check_timestamp}}</p>
         <p>Last transaction: {{last_transaction_timestamp}}</p>
-        <p id="drift">Drift: <span {% if drift> 1.0 %}class="important"{% endif %}>{{drift}}</span></p>
+        <p id="drift">Drift: <span class="{% if drift > 1.0 %}important{% endif %}">{{drift}}</span></p>
         <p id="websocket-info">WS: <span>connecting</span></p>
         <button id="reload" action="submit">Reload</button>
       </div>

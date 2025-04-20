@@ -97,6 +97,9 @@ pub(crate) struct User {
 	pub(crate) delta: f64,
 }
 
+const ZERO_REF: &f64 = &0.0;
+const FIVE_M_REF: &f64 = &5_000_000.0;
+
 #[derive(Template)]
 #[template(path = "index.html")]
 pub(crate) struct BankerTemplate {
