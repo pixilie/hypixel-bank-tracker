@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="fr">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <title>Bank Account Tracker</title>
+
+  <link rel="stylesheet" href="styles.css">
+  <script type="text/javascript" src="script.js" defer></script>
+</head>
+
+<body>
+  <div class="dual">
+    <div id="history">
+      <div id="last-day" class="box">
+        <h1>Last 24h overview</h1>
+        <table class="last-day-list">
+          <tbody>
+            {% for user in users %}
+            <tr>
+              <td class="user">{{user.name}}</td>
+              <td class="delta{% if user.delta < 0.0 %}negative{% endif %}">{% if user.delta > 0.0 %}+{% endif
+                %}{{user.delta}}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+
+      <div id="transaction-history" class="box">
+        <h1>Transactions history</h1>
+        <table class="history-list">
+          <tbody>
+            <tr>
+              {% for (timestamp, operation) in operations %}
+              {% match operation %}
+              {% when Operation::PlayerPurse {amount, username, repeat_count} %}
+              <td class="action{% if amount > 0.0 %} deposit{% else %} withdrawal{% endif %}">{% if
+                amount > 0.0 %} + {% else %} - {% endif %}</td>
+              <td class="amount{% if amount > 5_000_000.0 %} large{% endif %}">{{amount}}</td>
+              <td class="user">{{username}}</td>
+              <td>{{timestamp}}</td>
+
+              {% when Operation::BankInterests {amount} %}
+              <td class="action deposit">+</td>
+              <td class="amount{% if amount > 5_000_000.0 %} large{% endif %}">{{amount}}</td>
+              <td class="user">Bank Interests</td>
+              <td>{{timestamp}}</td>
+
+              {% when Operation::PlayerTransfer {amount, receiver, sender, repeat_count} %}
+              <td class="action transfer">⬌</td>
+              <td class="amount{% if amount > 5_000_000.0 %} large{% endif %}">{{amount}}</td>
+              <td class="user">{{sender}}</td>
+              <td class="user">{receiver}}</td>
+              <td>{{timestamp}}</td>
+
+
+              {% when Operation::WeirdWaypoint %}
+              <td class="action transfer">⬌</td>
+              <td class="amount">Warning</td>
+              <td class="user">Weird waypoint</td>
+              <td>{{timestamp}}</td>
+              {% endmatch %}
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% let recent_operations = operations.len() %}
+        <p class="number-of-transactions">Shown {{recent_operations}} transactions on {{total_operations}} recorded</p>
+      </div>
+    </div>
+    <div id="additional-info">
+      <div id="balance" class="box">
+        <p class="balance-info">Balance: {{balance}} ({{completion_percentage}})</p>
+        <p class="balance-info additional">Max balance: {{max_balance}}</p>
+
+        <p class="balance-info">Interests: {{bank_interests}}</p>
+
+        <div class="members">
+          <h2>Members</h2>
+
+          <table>
+            <tbody>
+              {% for user in users %}
+              <tr data-username="{{user.name}}">
+                <td class="user">{{user.name}}</td>
+                <td class="common-balance{% if user.balance < 0.0 %} negative{% endif %}">{{user.balance}}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="actions" class="box">
+        <h1>Transfer</h1>
+        <form id="transaction-form">
+          <datalist id="users-list">
+            {% for user in users %}
+            <option value="{{user.name}}">{{user.name}}</option>
+            {% endfor %}
+            <option value="@bank-interest">Bank Interests</option>
+          </datalist>
+
+          <div>
+            <label for="amount">Amount:</label>
+            <input type="number" id="amount" name="amount" required>
+          </div>
+
+          <div>
+            <label for="from-user">From:</label>
+            <input type="text" list="users-list" id="from-user" name="from-user" required>
+          </div>
+
+          <div>
+            <label for="to-user">To:</label>
+            <input type="text" list="users-list" id="to-user" name="to-user" required>
+          </div>
+
+          <button id="transfer">Transfer</button>
+        </form>
+        <span id="transfer-logs"></span>
+      </div>
+
+      <div id="technical-infos" class="box">
+        <h1>Technical informations</h1>
+        <p>Last check: {{last_check_timestamp}}</p>
+        <p>Last transaction: {{last_transaction_timestamp}}</p>
+        <p id="drift">Drift: <span {% if drift> 1.0 %}class="important"{% endif %}>{{drift}}</span></p>
+        <p id="websocket-info">WS: <span>connecting</span></p>
+        <button id="reload" action="submit">Reload</button>
+      </div>
+    </div>
+  </div>
+</body>
+
+</html>

@@ -33,7 +33,7 @@
         in
         {
           default = pkgs.mkShell rec {
-            nativeBuildInputs = with pkgs; [ pkg-config rust-toolchain act ];
+            nativeBuildInputs = with pkgs; [ pkg-config rust-toolchain act cargo-expand];
 
             buildInputs = with pkgs; [ openssl ];
 

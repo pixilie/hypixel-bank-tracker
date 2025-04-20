@@ -1,15 +1,20 @@
 #![allow(dead_code)]
 
+use askama::Template;
 use dotenvy::{self, var};
-use helpers::{get_max_balance, handle_connection};
-use models::{Banking, Config, Profile, ProfileResponse, Transaction, Username};
+use helpers::get_max_balance;
+use models::{
+	BankerTemplate, Banking, Config, Profile, ProfileResponse, Transaction, User, Username,
+};
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::{
 	collections::HashMap,
 	fmt::Display,
 	fs,
-	net::TcpListener,
+	io::{BufRead, BufReader, Write},
+	net::{TcpListener, TcpStream},
+	sync::Arc,
 	time::{SystemTime, UNIX_EPOCH},
 };
 use thread::ThreadPool;
@@ -26,6 +31,7 @@ const DB_VERSION: u64 = 3;
 pub(crate) struct DataFile {
 	version: u64,
 	last_transaction_timestamp: u128,
+	last_check_timestamp: u128,
 	balance: f64,
 	drift: f64,
 	max_balance: Option<u64>,
@@ -34,7 +40,7 @@ pub(crate) struct DataFile {
 	operations: Vec<(u128, Operation)>,
 }
 
-#[derive(Debug, Deserialize, Serialize)]
+#[derive(Debug, Deserialize, Serialize, Clone)]
 #[serde(tag = "type")]
 pub(crate) enum Operation {
 	PlayerPurse {
@@ -101,7 +107,7 @@ fn load_config_from_env() -> Config {
 	}
 }
 
-fn fetch_api(config: &Config, client: &Client) -> Profile {
+fn fetch_api(config: &Config, client: &Client, database: &mut DataFile) -> Profile {
 	println!(
 		"Fetching fresh information for profile {0}",
 		config.profile_uuid
@@ -121,6 +127,11 @@ fn fetch_api(config: &Config, client: &Client) -> Profile {
 		"Got fresh information for profile {:?}, reloadind clients",
 		config.profile_uuid
 	);
+
+	database.last_check_timestamp = SystemTime::now()
+		.duration_since(UNIX_EPOCH)
+		.unwrap()
+		.as_millis();
 
 	response.profile
 }
@@ -242,6 +253,18 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 	database.balance = banking.balance;
 }
 
+pub(crate) fn handle_connection(mut stream: TcpStream, template: Arc<BankerTemplate>) {
+	let _ = BufReader::new(&stream)
+		.lines()
+		.map(|result| result.unwrap())
+		.take_while(|line| !line.is_empty())
+		.collect::<Vec<_>>();
+
+	template.render().unwrap();
+	let response = "HTTP/1.1 200 OK\r\n\r\n";
+	stream.write_all(response.as_bytes()).unwrap();
+}
+
 fn main() {
 	let pool = ThreadPool::new(4);
 	let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
@@ -250,18 +273,52 @@ fn main() {
 	let mut database = load_database(DB_FILE);
 	let client = reqwest::blocking::Client::new();
 
+	let users = database
+		.users
+		.clone()
+		.into_iter()
+		.map(|(username, balance)| User {
+			name: username,
+			balance,
+			delta: balance,
+		})
+		.collect();
+
+	let operations_sample = database.operations.iter().take(25).cloned().collect();
+
+	let completion_percentage = format!(
+		"{:.2}%",
+		(database.balance / database.max_balance.unwrap() as f64) * 100.0
+	);
+
+	let template = BankerTemplate {
+		users,
+		operations: operations_sample,
+		bank_interests: database.bank_interests,
+		balance: database.balance,
+		max_balance: database.max_balance.unwrap(),
+		completion_percentage,
+		last_check_timestamp: database.last_check_timestamp,
+		last_transaction_timestamp: database.last_transaction_timestamp,
+		drift: database.drift,
+		total_operations: database.operations.len(),
+	};
+
 	pool.execute(move || {
-		let new_profile = fetch_api(&config, &client);
+		let new_profile = fetch_api(&config, &client, &mut database);
 
 		update_transaction(&new_profile, &mut database);
 		write_database(&database);
 	});
 
+	let template = Arc::new(template);
+
 	for stream in listener.incoming() {
 		let stream = stream.unwrap();
+		let template = Arc::clone(&template);
 
 		pool.execute(|| {
-			handle_connection(stream);
+			handle_connection(stream, template);
 		});
 	}
 }

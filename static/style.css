@@ -1,0 +1,200 @@
+:root {
+  --wll-primary: black;
+
+  --wll-bg: white;
+  --wll-bg-second: oklch(95% 0 0);
+}
+
+body {
+  background-color: var(--wll-bg-second);
+
+  font-family: monospace;
+
+  margin: 0;
+  padding: 0;
+}
+
+
+.box {
+  margin: 2rem;
+  padding: 2rem;
+
+  background-color: var(--wll-bg);
+  border-radius: 5px;
+  box-shadow: 0 0 10px oklch(0% 0 0 / 10%);
+}
+
+button {
+  font-size: 0.9rem;
+  padding: 0.4rem 0.9rem;
+  border: none;
+  border-radius: 5px;
+  background-color: var(--wll-bg-second);
+  color: black;
+  cursor: pointer;
+  margin: 0.5rem 0;
+
+  &:hover {
+    background-color: oklch(90% 0 0);
+  }
+}
+
+/* Specific */
+
+.dual {
+  display: flex;
+}
+
+#history {
+  width: 50%;
+
+  #last-day {
+    table tr {
+      font-size: 1.2rem;
+      line-height: 1rem;
+
+      td {
+        padding: .2rem .6rem;
+
+        &.user {
+          font-style: italic;
+        }
+
+        &.delta {
+          text-align: right;
+
+          &.negative {
+            color: red;
+          }
+        }
+      }
+    }
+  }
+
+  #transaction-history {
+    table tr {
+      font-size: 1.2rem;
+      line-height: 1rem;
+
+      td {
+        padding: .2rem .6rem;
+
+        &.action {
+          font-size: 2rem;
+          text-align: center;
+
+          &.deposit {
+            color: green
+          }
+
+          &.withdrawal {
+            color: red;
+          }
+
+          &.transfer {
+            color: oklch(82% 0.16 78);
+          }
+        }
+
+        &.amount {
+          text-align: right;
+        }
+
+        &.user {
+          font-style: italic;
+        }
+      }
+    }
+
+    .number-of-transactions {
+      text-align: center;
+    }
+  }
+}
+
+#additional-info {
+  width: 50%;
+
+  #balance {
+    .balance-info {
+      margin: 0;
+
+      font-size: 1.5rem;
+
+      &.additional {
+        font-size: 1rem;
+        margin-bottom: 1rem;
+      }
+    }
+
+    .members {
+      h2 {
+        font-size: 1.5rem;
+      }
+
+      table tr {
+        font-size: 1.2rem;
+        line-height: 1rem;
+
+        &[data-username="Bank Interest"] {
+          td.user {
+            color: oklch(80% 0 0);
+          }
+        }
+
+        td {
+          padding: .2rem .6rem;
+
+          &.user {
+            font-style: italic;
+          }
+
+          &.common-balance {
+            text-align: right;
+
+            &.negative {
+              color: red;
+            }
+          }
+        }
+      }
+    }
+  }
+
+  #transaction-form {
+    font-size: 1.2rem;
+
+    label {
+      display: inline-block;
+      width: 8rem;
+    }
+  }
+
+  #transfer-logs {
+    color: red;
+    font-size: 1.2rem;
+  }
+}
+
+#technical-infos {
+  #drift {
+    span {
+      &.important {
+        font-weight: 800;
+        color: red;
+      }
+    }
+  }
+
+  #websocket-info {
+    span {
+      &.connected {
+        color: green;
+      }
+
+      &.disconnected {
+        color: red;
+      }
+    }
+  }
+}

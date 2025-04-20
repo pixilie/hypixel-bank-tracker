@@ -1,7 +1,5 @@
 use std::{
 	collections::HashMap,
-	io::{BufRead, BufReader, Write},
-	net::TcpStream,
 	time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -66,15 +64,4 @@ fn process_user_balance_evolution(operations: Vec<(u128, Operation)>) -> Vec<(Us
 		});
 
 	recent_transactions.into_iter().collect()
-}
-
-pub(crate) fn handle_connection(mut stream: TcpStream) {
-	let _ = BufReader::new(&stream)
-		.lines()
-		.map(|result| result.unwrap())
-		.take_while(|line| !line.is_empty())
-		.collect::<Vec<_>>();
-
-	let response = "HTTP/1.1 200 OK\r\n\r\n";
-	stream.write_all(response.as_bytes()).unwrap();
 }

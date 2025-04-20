@@ -1,6 +1,9 @@
 #![allow(dead_code)]
+use askama::Template;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display};
+
+use crate::Operation;
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Hash, Clone)]
 pub(crate) struct Uuid(String);
@@ -86,4 +89,25 @@ pub(crate) struct Transaction {
 pub(crate) enum TransactionAction {
 	Deposit,
 	Withdraw,
+}
+
+pub(crate) struct User {
+	pub(crate) name: Username,
+	pub(crate) balance: f64,
+	pub(crate) delta: f64,
+}
+
+#[derive(Template)]
+#[template(path = "index.html")]
+pub(crate) struct BankerTemplate {
+	pub(crate) users: Vec<User>,
+	pub(crate) operations: Vec<(u128, Operation)>,
+	pub(crate) bank_interests: f64,
+	pub(crate) balance: f64,
+	pub(crate) max_balance: u64,
+	pub(crate) completion_percentage: String,
+	pub(crate) last_check_timestamp: u128,
+	pub(crate) last_transaction_timestamp: u128,
+	pub(crate) drift: f64,
+	pub(crate) total_operations: usize,
 }
