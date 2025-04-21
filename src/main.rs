@@ -144,7 +144,7 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 	let mut new_transactions = banking
 		.transactions
 		.into_iter()
-		.take_while(|transaction| transaction.timestamp > database.last_transaction_timestamp)
+		.skip_while(|transaction| transaction.timestamp <= database.last_transaction_timestamp)
 		.map(
 			|Transaction {
 			     amount,
