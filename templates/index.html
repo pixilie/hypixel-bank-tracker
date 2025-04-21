@@ -22,7 +22,7 @@
             <tr>
               <td class="user">{{user.name}}</td>
               <td class="delta{% if user.delta < 0.0 %} negative{% endif %}">
-                {% if user.delta > 0.0 %}+{% endif %} {{self.format_number(user.delta)}}
+                {% if user.delta > 0.0 %}+{% endif %} {{self.format_number(*user.delta)}}
               </td>
             </tr>
             {% endfor %}
@@ -38,30 +38,30 @@
               <tr>
                 {% match operation %}
                   {% when Operation::PlayerPurse {amount, username, repeat_count} %}
-                    <td class="action{% if amount > crate::models::ZERO_REF %} deposit{% else %} withdrawal{% endif %}">
-                      {% if amount > crate::models::ZERO_REF %} + {% else %} - {% endif %}</td>
-                    <td class="amount{% if amount > crate::models::FIVE_M_REF %} large{% endif %}">{{self.format_number(amount)}}</td>
+                    <td class="action{% if *amount > 0.0 %} deposit{% else %} withdrawal{% endif %}">
+                      {% if *amount > 0.0 %} + {% else %} - {% endif %}</td>
+                    <td class="amount{% if *amount > 5_000_000.0 %} large{% endif %}">{{self.format_number(**amount)}}</td>
                     <td class="user">{{username}}</td>
-                    <td>{{self.format_timestamp(timestamp)}}</td>
+                    <td>{{self.format_timestamp(**timestamp)}}</td>
 
                   {% when Operation::BankInterests {amount} %}
                     <td class="action deposit">+</td>
-                    <td class="amount{% if amount > crate::models::FIVE_M_REF %} large{% endif %}">{{self.format_number(amount)}}</td>
+                    <td class="amount{% if *amount > 5_000_000.0 %} large{% endif %}">{{self.format_number(**amount)}}</td>
                     <td class="user">Bank Interests</td>
-                    <td>{{self.format_timestamp(timestamp)}}</td>
+                    <td>{{self.format_timestamp(**timestamp)}}</td>
 
                   {% when Operation::PlayerTransfer {amount, receiver, sender, repeat_count} %}
                     <td class="action transfer">⬌</td>
-                    <td class="amount{% if amount > crate::models::FIVE_M_REF %} large{% endif %}">{{self.format_number(amount)}}</td>
+                    <td class="amount{% if *amount > 5_000_000.0 %} large{% endif %}">{{self.format_number(**amount)}}</td>
                     <td class="user">{{sender}}</td>
                     <td class="user">{{receiver}}</td>
-                    <td>{{self.format_timestamp(timestamp)}}</td>
+                    <td>{{self.format_timestamp(**timestamp)}}</td>
 
                   {% when Operation::WeirdWaypoint %}
                     <td class="action transfer">⬌</td>
                     <td class="amount">Warning</td>
                     <td class="user">Weird waypoint</td>
-                    <td>{{self.format_timestamp(timestamp)}}</td>
+                    <td>{{self.format_timestamp(**timestamp)}}</td>
                 {% endmatch %}
               </tr>
             {% endfor %}
@@ -73,10 +73,10 @@
     </div>
     <div id="additional-info">
       <div id="balance" class="box">
-        <p class="balance-info">Balance: {{self.format_number(balance)}} ({{completion_percentage}})</p>
+        <p class="balance-info">Balance: {{self.format_number(*balance)}} ({{completion_percentage}})</p>
         <p class="balance-info additional">Max balance: {{max_balance}}</p>
 
-        <p class="balance-info">Interests: {{self.format_number(bank_interests)}}</p>
+        <p class="balance-info">Interests: {{self.format_number(*bank_interests)}}</p>
 
         <div class="members">
           <h2>Members</h2>
@@ -86,7 +86,7 @@
               {% for user in users %}
               <tr data-username="{{user.name}}">
                 <td class="user">{{user.name}}</td>
-                <td class="common-balance{% if user.balance < 0.0 %} negative{% endif %}">{{self.format_number(user.balance)}}</td>
+                <td class="common-balance{% if user.balance < 0.0 %} negative{% endif %}">{{self.format_number(*user.balance)}}</td>
               </tr>
               {% endfor %}
             </tbody>
@@ -126,8 +126,8 @@
 
       <div id="technical-infos" class="box">
         <h1>Technical informations</h1>
-        <p>Last check: {{self.format_timestamp(last_check_timestamp)}}</p>
-        <p>Last transaction: {{self.format_timestamp(last_transaction_timestamp)}}</p>
+        <p>Last check: {{self.format_timestamp(*last_check_timestamp)}}</p>
+        <p>Last transaction: {{self.format_timestamp(*last_transaction_timestamp)}}</p>
         <p id="drift">Drift: <span class="{% if drift > 1.0 %}important{% endif %}">{{drift}}</span></p>
         <p id="websocket-info">WS: <span>connecting</span></p>
         <button id="reload" action="submit">Reload</button>

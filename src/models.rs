@@ -98,9 +98,6 @@ pub(crate) struct User {
 	pub(crate) delta: f64,
 }
 
-const ZERO_REF: &f64 = &0.0;
-const FIVE_M_REF: &f64 = &5_000_000.0;
-
 #[derive(Template)]
 #[template(path = "index.html")]
 pub(crate) struct BankerTemplate {
@@ -116,9 +113,9 @@ pub(crate) struct BankerTemplate {
 	pub(crate) total_operations: usize,
 }
 
-// TODO: fix type when askama type fixed
+#[expect(clippy::unused_self, reason = "askama template works with methods")]
 impl BankerTemplate {
-	fn format_number(&self, n: &f64) -> String {
+	fn format_number(&self, n: f64) -> String {
 		let rounded = n.round();
 		let int_part = rounded.to_string();
 
@@ -137,8 +134,8 @@ impl BankerTemplate {
 		spaced_int
 	}
 
-	fn format_timestamp(&self, ts: &u128) -> String {
-		if let Ok(secs) = i64::try_from(*ts / 1000) {
+	fn format_timestamp(&self, ts: u128) -> String {
+		if let Ok(secs) = i64::try_from(ts / 1000) {
 			if let Some(datetime) = Local.timestamp_opt(secs, 0).single() {
 				return datetime.format("%H:%M %d/%m").to_string();
 			}

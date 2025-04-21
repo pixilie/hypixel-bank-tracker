@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-askama = "0.12"
+askama = "0.13"
 chrono = "0.4"
 dotenvy = "0.15"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
