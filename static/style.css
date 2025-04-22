@@ -39,6 +39,12 @@ button {
   }
 }
 
+/* To remove when tranfer implemeted */
+button#transfer[disabled] {
+  color: gray;
+  pointer-events: none;
+}
+
 /* Specific */
 
 .dual {

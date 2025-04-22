@@ -44,7 +44,7 @@ pub(crate) fn process_user_balance_evolution(
 
 	let recent_transactions = operations
 		.iter()
-		.take_while(|(timestamp, _)| current - timestamp > 24 * 3600 * 1000)
+		.skip_while(|(timestamp, _)| current - timestamp > 24 * 3600 * 1000)
 		.fold(HashMap::new(), |mut delta_hm, (_, operation)| {
 			match operation {
 				Operation::PlayerPurse {

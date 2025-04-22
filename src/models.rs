@@ -92,17 +92,22 @@ pub(crate) enum TransactionAction {
 	Withdraw,
 }
 
-pub(crate) struct User {
+pub(crate) struct UserBalance {
 	pub(crate) name: Username,
 	pub(crate) balance: f64,
+}
+
+pub(crate) struct UserDelta {
+	pub(crate) name: Username,
 	pub(crate) delta: f64,
 }
 
 #[derive(Template)]
 #[template(path = "index.html")]
 pub(crate) struct BankerTemplate {
-	pub(crate) users: Vec<User>,
+	pub(crate) users: Vec<UserBalance>,
 	pub(crate) operations: Vec<(u128, Operation)>,
+	pub(crate) deltas: Vec<UserDelta>,
 	pub(crate) bank_interests: f64,
 	pub(crate) balance: f64,
 	pub(crate) max_balance: u64,

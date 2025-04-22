@@ -1,11 +1,15 @@
 #![allow(dead_code)]
 
 use askama::Template;
+use core::time;
 use dotenvy::{self, var};
 use helpers::{get_max_balance, process_user_balance_evolution};
 use models::{
-	BankerTemplate, Banking, Config, Profile, ProfileResponse, Transaction, User, Username,
+	BankerTemplate, Banking, Config, Profile, ProfileResponse, Transaction, UserBalance, UserDelta,
+	Username,
 };
+use parking_lot::Mutex;
+use pool::ThreadPool;
 use reqwest::blocking::Client;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -15,14 +19,14 @@ use std::{
 	io::{BufRead, BufReader, Write},
 	net::{TcpListener, TcpStream},
 	sync::Arc,
+	thread,
 	time::{SystemTime, UNIX_EPOCH},
 };
-use thread::ThreadPool;
 use url::Url;
 
 mod helpers;
 mod models;
-mod thread;
+mod pool;
 
 const DB_FILE: &str = "data.json";
 const DB_VERSION: u64 = 3;
@@ -293,25 +297,29 @@ pub(crate) fn handle_connection(mut stream: TcpStream, template: &Arc<BankerTemp
 	}
 }
 
-fn main() {
-	let pool = ThreadPool::new(4);
-	let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-
-	let config = load_config_from_env();
-	let mut database = load_database(DB_FILE);
-	let client = reqwest::blocking::Client::new();
-
+fn generate_template(database: &Arc<Mutex<DataFile>>) -> BankerTemplate {
+	let database = database.lock();
 	let mut users = database
 		.users
 		.clone()
 		.into_iter()
-		.map(|(username, balance)| User {
-			name: username.clone(),
+		.map(|(username, balance)| UserBalance {
+			name: username,
 			balance,
-			delta: process_user_balance_evolution(&database.operations, &username),
 		})
 		.collect::<Vec<_>>();
 	users.sort_by(|a, b| b.balance.total_cmp(&a.balance));
+
+	let mut deltas = database
+		.users
+		.clone()
+		.into_keys()
+		.map(|username| UserDelta {
+			name: username.clone(),
+			delta: process_user_balance_evolution(&database.operations, &username),
+		})
+		.collect::<Vec<_>>();
+	deltas.sort_by(|a, b| b.delta.total_cmp(&a.delta));
 
 	let completion_percentage = format!(
 		"{:.2}%",
@@ -321,6 +329,7 @@ fn main() {
 	let template = BankerTemplate {
 		users,
 		operations: database.operations.iter().rev().take(25).cloned().collect(),
+		deltas,
 		bank_interests: database.bank_interests,
 		balance: database.balance,
 		max_balance: database.max_balance.unwrap(),
@@ -331,18 +340,35 @@ fn main() {
 		total_operations: database.operations.len(),
 	};
 
-	pool.execute(move || {
-		let new_profile = fetch_api(&config, &client, &mut database);
+	template
+}
 
-		update_transaction(&new_profile, &mut database);
-		write_database(&database);
+fn spawn_fetch_thread(config: Config, database: Arc<Mutex<DataFile>>, client: Client) {
+	thread::spawn(move || loop {
+		{
+			let mut locked_database = database.lock();
+			let new_profile = fetch_api(&config, &client, &mut locked_database);
+
+			update_transaction(&new_profile, &mut locked_database);
+			write_database(&locked_database);
+		}
+
+		thread::sleep(time::Duration::from_secs(600));
 	});
+}
 
-	let template = Arc::new(template);
+fn main() {
+	let pool = ThreadPool::new(10);
+	let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+	let config = load_config_from_env();
+	let database = Arc::new(Mutex::new(load_database(DB_FILE)));
+	let client = reqwest::blocking::Client::new();
+
+	spawn_fetch_thread(config, database.clone(), client);
 
 	for stream in listener.incoming() {
 		let stream = stream.unwrap();
-		let template = Arc::clone(&template);
+		let template = Arc::new(generate_template(&database));
 
 		pool.execute(move || {
 			handle_connection(stream, &template);
