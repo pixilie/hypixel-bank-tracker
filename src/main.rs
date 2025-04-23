@@ -3,7 +3,7 @@
 use askama::Template;
 use core::time;
 use dotenvy::{self, var};
-use helpers::{get_max_balance, process_user_balance_evolution};
+use helpers::{format_completion_percentage, get_max_balance, process_user_balance_evolution};
 use models::{
 	BankerTemplate, Banking, Config, Profile, ProfileResponse, Transaction, UserBalance, UserDelta,
 	Username,
@@ -38,7 +38,7 @@ pub(crate) struct DataFile {
 	last_check_timestamp: u128,
 	balance: f64,
 	drift: f64,
-	max_balance: Option<u64>,
+	max_balance: String,
 	bank_interests: f64,
 	users: HashMap<Username, f64>,
 	operations: Vec<(u128, Operation)>,
@@ -257,7 +257,7 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 	database.balance = banking.balance;
 }
 
-pub(crate) fn handle_connection(mut stream: TcpStream, template: &Arc<BankerTemplate>) {
+pub(crate) fn handle_connection(mut stream: TcpStream, body: &str) {
 	let reader = BufReader::new(&stream);
 	let request_line = reader.lines().next().unwrap().unwrap();
 	let request_path = request_line.split_whitespace().nth(1).unwrap_or("/");
@@ -286,7 +286,6 @@ pub(crate) fn handle_connection(mut stream: TcpStream, template: &Arc<BankerTemp
 			stream.write_all(response.as_bytes()).unwrap();
 		}
 	} else {
-		let body = template.as_ref().render().unwrap();
 		let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: {}\r\n\r\n{}",
             body.len(),
@@ -297,52 +296,54 @@ pub(crate) fn handle_connection(mut stream: TcpStream, template: &Arc<BankerTemp
 	}
 }
 
-fn generate_template(database: &Arc<Mutex<DataFile>>) -> BankerTemplate {
+#[expect(clippy::significant_drop_tightening)]
+fn generate_template(database: &Arc<Mutex<DataFile>>) -> String {
 	let database = database.lock();
+
 	let mut users = database
 		.users
-		.clone()
-		.into_iter()
+		.iter()
 		.map(|(username, balance)| UserBalance {
 			name: username,
-			balance,
+			balance: *balance,
 		})
 		.collect::<Vec<_>>();
 	users.sort_by(|a, b| b.balance.total_cmp(&a.balance));
 
-	let mut deltas = database
-		.users
-		.clone()
-		.into_keys()
-		.map(|username| UserDelta {
-			name: username.clone(),
-			delta: process_user_balance_evolution(&database.operations, &username),
+	let mut deltas = process_user_balance_evolution(&database.operations)
+		.iter()
+		.filter(|(_, delta)| **delta != 0.0)
+		.map(|(name, delta)| UserDelta {
+			name,
+			delta: *delta,
 		})
 		.collect::<Vec<_>>();
 	deltas.sort_by(|a, b| b.delta.total_cmp(&a.delta));
 
-	let completion_percentage = format!(
-		"{:.2}%",
-		(database.balance / database.max_balance.unwrap() as f64) * 100.0
-	);
-
 	let template = BankerTemplate {
 		users,
-		operations: database.operations.iter().rev().take(25).cloned().collect(),
+		operations: database
+			.operations
+			.get(database.operations.len() - 25..)
+			.unwrap_or(&database.operations[..]),
 		deltas,
 		bank_interests: database.bank_interests,
 		balance: database.balance,
-		max_balance: database.max_balance.unwrap(),
-		completion_percentage,
+		max_balance: database.max_balance.clone(),
+		completion_percentage: format_completion_percentage(
+			database.balance,
+			&database.max_balance,
+		),
 		last_check_timestamp: database.last_check_timestamp,
 		last_transaction_timestamp: database.last_transaction_timestamp,
 		drift: database.drift,
 		total_operations: database.operations.len(),
 	};
 
-	template
+	template.render().unwrap()
 }
 
+#[expect(clippy::significant_drop_tightening)]
 fn spawn_fetch_thread(config: Config, database: Arc<Mutex<DataFile>>, client: Client) {
 	thread::spawn(move || loop {
 		{
@@ -368,7 +369,7 @@ fn main() {
 
 	for stream in listener.incoming() {
 		let stream = stream.unwrap();
-		let template = Arc::new(generate_template(&database));
+		let template = generate_template(&database);
 
 		pool.execute(move || {
 			handle_connection(stream, &template);

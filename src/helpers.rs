@@ -5,20 +5,18 @@ use std::{
 
 use crate::{models::Profile, Operation, Username};
 
-pub(crate) fn get_max_balance(profile: &Profile) -> Option<u64> {
-	let mut bank_level = HashMap::new();
-	// bank_level.from([
+pub(crate) fn get_max_balance(profile: &Profile) -> String {
+	let bank_level = HashMap::from([
+		("BANK_UPGRADE_STARTER", 5_000_000u64),
+		("BANK_UPGRADE_GOLD", 100_000_000u64),
+		("BANK_UPGRADE_DELUXE", 250_000_000u64),
+		("BANK_UPGRADE_SUPER_DELUXE", 500_000_000u64),
+		("BANK_UPGRADE_PREMIER", 1_000_000_000u64),
+		("BANK_UPGRADE_LUXURIOUS", 6_000_000_000u64),
+		("BANK_UPGRADE_PALATIAL", 60_000_000_000u64),
+	]);
 
-	// ]);
-	bank_level.insert("BANK_UPGRADE_STARTER", 5_000_000);
-	bank_level.insert("BANK_UPGRADE_GOLD", 100_000_000);
-	bank_level.insert("BANK_UPGRADE_DELUXE", 250_000_000);
-	bank_level.insert("BANK_UPGRADE_SUPER_DELUXE", 500_000_000);
-	bank_level.insert("BANK_UPGRADE_PREMIER", 1_000_000_000);
-	bank_level.insert("BANK_UPGRADE_LUXURIOUS", 6_000_000_000);
-	bank_level.insert("BANK_UPGRADE_PALATIAL", 60_000_000_000);
-
-	profile
+	let max_balance = profile
 		.members
 		.values()
 		.filter_map(|member| {
@@ -30,13 +28,14 @@ pub(crate) fn get_max_balance(profile: &Profile) -> Option<u64> {
 				.max()
 		})
 		.max()
-		.copied()
+		.map(|value| value.to_string());
+
+	max_balance.map_or_else(|| "Unknown".to_string(), |value| value)
 }
 
 pub(crate) fn process_user_balance_evolution(
-	operations: &Vec<(u128, Operation)>,
-	user: &Username,
-) -> f64 {
+	operations: &[(u128, Operation)],
+) -> HashMap<&Username, f64> {
 	let current = SystemTime::now()
 		.duration_since(UNIX_EPOCH)
 		.unwrap()
@@ -66,5 +65,12 @@ pub(crate) fn process_user_balance_evolution(
 			delta_hm
 		});
 
-	recent_transactions.get(&user).map_or(0.0, |value| *value)
+	recent_transactions
+}
+
+pub(crate) fn format_completion_percentage(balance: f64, max_balance: &str) -> String {
+	max_balance.parse::<f64>().map_or_else(
+		|_| "Unkwow".to_string(),
+		|max_balance| format!("{:.2}%", (balance / max_balance) * 100.0),
+	)
 }

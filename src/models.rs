@@ -92,25 +92,25 @@ pub(crate) enum TransactionAction {
 	Withdraw,
 }
 
-pub(crate) struct UserBalance {
-	pub(crate) name: Username,
+pub(crate) struct UserBalance<'a> {
+	pub(crate) name: &'a Username,
 	pub(crate) balance: f64,
 }
 
-pub(crate) struct UserDelta {
-	pub(crate) name: Username,
+pub(crate) struct UserDelta<'a> {
+	pub(crate) name: &'a Username,
 	pub(crate) delta: f64,
 }
 
 #[derive(Template)]
 #[template(path = "index.html")]
-pub(crate) struct BankerTemplate {
-	pub(crate) users: Vec<UserBalance>,
-	pub(crate) operations: Vec<(u128, Operation)>,
-	pub(crate) deltas: Vec<UserDelta>,
+pub(crate) struct BankerTemplate<'a> {
+	pub(crate) users: Vec<UserBalance<'a>>,
+	pub(crate) operations: &'a [(u128, Operation)],
+	pub(crate) deltas: Vec<UserDelta<'a>>,
 	pub(crate) bank_interests: f64,
 	pub(crate) balance: f64,
-	pub(crate) max_balance: u64,
+	pub(crate) max_balance: String,
 	pub(crate) completion_percentage: String,
 	pub(crate) last_check_timestamp: u128,
 	pub(crate) last_transaction_timestamp: u128,
@@ -119,7 +119,7 @@ pub(crate) struct BankerTemplate {
 }
 
 #[expect(clippy::unused_self, reason = "askama template works with methods")]
-impl BankerTemplate {
+impl BankerTemplate<'_> {
 	fn format_number(&self, n: f64) -> String {
 		let rounded = n.round();
 		let int_part = rounded.to_string();

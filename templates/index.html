@@ -8,7 +8,7 @@
   <title>Bank Account Tracker</title>
 
   <link rel="stylesheet" href="../static/style.css">
-  <!-- <script type="text/javascript" src="../static/script.js" defer></script> -->
+  <script type="text/javascript" src="../static/script.js" defer></script>
   <link rel="icon" type="image/x-icon" href="../static/favicon.ico">
 </head>
 
@@ -19,14 +19,18 @@
         <h1>Last 24h overview</h1>
         <table class="last-day-list">
           <tbody>
-            {% for user in deltas %}
-            <tr>
-              <td class="user">{{user.name}}</td>
-              <td class="delta{% if user.delta < 0.0 %} negative{% endif %}">
-                {% if user.delta > 0.0 %}+{% endif %} {{self.format_number(*user.delta)}} ¤
-              </td>
-            </tr>
-            {% endfor %}
+            {% if deltas.is_empty() %}
+              <p class="user">No recent activity. Spend money and come back.</p>
+            {% else %}
+              {% for user in deltas %}
+              <tr>
+                <td class="user">{{user.name}}</td>
+                <td class="delta{% if user.delta < 0.0 %} negative{% endif %}">
+                  {% if user.delta > 0.0 %}+{% endif %} {{self.format_number(*user.delta)}} ¤
+                </td>
+              </tr>
+              {% endfor %}
+            {% endif %}
           </tbody>
         </table>
       </div>
@@ -35,25 +39,25 @@
         <h1>Transactions history</h1>
         <table class="history-list">
           <tbody>
-            {% for (timestamp, operation) in operations %}
+            {% for (timestamp, operation) in operations.iter().rev() %}
             <tr>
               {% match operation %}
               {% when Operation::PlayerPurse {amount, username, repeat_count} %}
               <td class="action{% if *amount > 0.0 %} deposit{% else %} withdrawal{% endif %}">
                 {% if *amount > 0.0 %} + {% else %} - {% endif %}</td>
-              <td class="amount{% if *amount > 5_000_000.0 %} large{% endif %}">{{self.format_number(**amount)}} ¤</td>
+              <td class="amount{% if *amount > 5_000_000.0 %} large{% endif %}">{{self.format_number(amount.abs())}} ¤</td>
               <td class="user">{{username}}</td>
               <td>{{self.format_timestamp(**timestamp)}}</td>
 
               {% when Operation::BankInterests {amount} %}
               <td class="action deposit">+</td>
-              <td class="amount{% if *amount > 5_000_000.0 %} large{% endif %}">{{self.format_number(**amount)}} ¤</td>
+              <td class="amount{% if *amount > 5_000_000.0 %} large{% endif %}">{{self.format_number(amount.abs())}} ¤</td>
               <td class="user">Bank Interests</td>
               <td>{{self.format_timestamp(**timestamp)}}</td>
 
               {% when Operation::PlayerTransfer {amount, receiver, sender, repeat_count} %}
               <td class="action transfer">⬌</td>
-              <td class="amount{% if *amount > 5_000_000.0 %} large{% endif %}">{{self.format_number(**amount)}}</td>
+              <td class="amount{% if *amount > 5_000_000.0 %} large{% endif %}">{{self.format_number(amount.abs())}} ¤)</td>
               <td class="user">{{sender}}</td>
               <td class="user">{{receiver}}</td>
               <td>{{self.format_timestamp(**timestamp)}}</td>
@@ -95,30 +99,30 @@
 
       <div id="actions" class="box">
         <h1>Transfer</h1>
-        <form id="transaction-form">
+        <form id="transaction-form", method="post" >
           <datalist id="users-list">
             {% for user in users %}
-            <option value="{{user.name}}">{{user.name}}</option>
+              <option value="{{user.name}}">{{user.name}}</option>
             {% endfor %}
             <option value="@bank-interest">Bank Interests</option>
           </datalist>
 
           <div>
             <label for="amount">Amount:</label>
-            <input type="number" id="amount" name="amount" required disabled>
+            <input type="number" id="amount" name="amount" required>
           </div>
 
           <div>
             <label for="from-user">From:</label>
-            <input type="text" list="users-list" id="from-user" name="from-user" required disabled>
+            <input type="text" list="users-list" id="from-user" name="from-user" required>
           </div>
 
           <div>
             <label for="to-user">To:</label>
-            <input type="text" list="users-list" id="to-user" name="to-user" required disabled>
+            <input type="text" list="users-list" id="to-user" name="to-user" required>
           </div>
 
-          <button id="transfer" disabled>Transfer</button>
+          <button id="transfer">Transfer</button>
         </form>
         <span id="transfer-logs"></span>
       </div>

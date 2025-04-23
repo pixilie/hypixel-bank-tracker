@@ -39,11 +39,11 @@ button {
   }
 }
 
-/* To remove when tranfer implemeted */
-button#transfer[disabled] {
-  color: gray;
-  pointer-events: none;
-}
+/* TODO: To remove when tranfer implemeted */
+/* button#transfer[disabled] { */
+/* color: gray; */
+/* pointer-events: none; */
+/* } */
 
 /* Specific */
 
@@ -169,6 +169,8 @@ button#transfer[disabled] {
 
   #transaction-form {
     font-size: 1.2rem;
+    /* TODO: To remove when transfer implemented */
+    /* color: gray; */
 
     label {
       display: inline-block;
