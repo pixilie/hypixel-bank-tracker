@@ -42,6 +42,7 @@ pub(crate) struct ProfileResponse {
 pub(crate) struct Config {
 	pub(crate) hypixel_api_key: String,
 	pub(crate) profile_uuid: String,
+	pub(crate) port: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]

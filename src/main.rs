@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use askama::Template;
+use askama::{filters::format, Template};
 use core::time;
 use dotenvy::{self, var};
 use helpers::{format_completion_percentage, get_max_balance, process_user_balance_evolution};
@@ -108,6 +108,7 @@ fn load_config_from_env() -> Config {
 	Config {
 		hypixel_api_key: var("HYPIXEL_API_KEY").unwrap(),
 		profile_uuid: var("PROFILE_UUID").unwrap(),
+		port: var("PORT").unwrap(),
 	}
 }
 
@@ -359,9 +360,9 @@ fn spawn_fetch_thread(config: Config, database: Arc<Mutex<DataFile>>, client: Cl
 }
 
 fn main() {
-	let pool = ThreadPool::new(10);
-	let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
 	let config = load_config_from_env();
+	let pool = ThreadPool::new(10);
+	let listener = TcpListener::bind(format!("127.0.0.1:{0}", config.port)).unwrap();
 	let database = Arc::new(Mutex::new(load_database(DB_FILE)));
 	let client = reqwest::blocking::Client::new();
 
