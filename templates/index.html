@@ -132,8 +132,8 @@
         <p>Last check: {{self.format_timestamp(*last_check_timestamp)}}</p>
         <p>Last transaction: {{self.format_timestamp(*last_transaction_timestamp)}}</p>
         <p id="drift">Drift: <span class="{% if drift > 1.0 %}important{% endif %}">{{drift}}</span></p>
-        <p id="websocket-info">WS: <span>connecting</span></p>
-        <button id="reload" action="submit">Reload</button>
+        <!-- <p id="websocket-info">WS: <span>connecting</span></p> -->
+        <!-- <button id="reload" action="submit">Reload</button> -->
       </div>
     </div>
   </div>

@@ -1,95 +1,28 @@
 #![allow(dead_code)]
 
-use askama::{filters::format, Template};
+use askama::Template;
+use chrono::Local;
 use core::time;
-use dotenvy::{self, var};
 use helpers::{format_completion_percentage, get_max_balance, process_user_balance_evolution};
 use models::{
-	BankerTemplate, Banking, Config, Profile, ProfileResponse, Transaction, UserBalance, UserDelta,
-	Username,
+	BankerTemplate, Banking, Config, DataFile, Operation, Profile, ProfileResponse, Transaction,
+	UserBalance, UserDelta, Username,
 };
 use parking_lot::Mutex;
-use pool::ThreadPool;
 use reqwest::blocking::Client;
-use serde::{Deserialize, Serialize};
+use rouille::{router, Response};
 use std::{
-	collections::HashMap,
-	fmt::Display,
-	fs,
-	io::{BufRead, BufReader, Write},
-	net::{TcpListener, TcpStream},
+	fs::{self},
 	sync::Arc,
 	thread,
-	time::{SystemTime, UNIX_EPOCH},
 };
 use url::Url;
 
 mod helpers;
 mod models;
-mod pool;
 
 const DB_FILE: &str = "data.json";
 const DB_VERSION: u64 = 3;
-
-#[derive(Debug, Deserialize, Serialize)]
-pub(crate) struct DataFile {
-	version: u64,
-	last_transaction_timestamp: u128,
-	last_check_timestamp: u128,
-	balance: f64,
-	drift: f64,
-	max_balance: String,
-	bank_interests: f64,
-	users: HashMap<Username, f64>,
-	operations: Vec<(u128, Operation)>,
-}
-
-#[derive(Debug, Deserialize, Serialize, Clone)]
-#[serde(tag = "type")]
-pub(crate) enum Operation {
-	PlayerPurse {
-		amount: f64,
-		username: Username,
-		repeat_count: u64,
-	},
-	PlayerTransfer {
-		amount: f64,
-		receiver: Username,
-		sender: Username,
-		repeat_count: u64,
-	},
-	WeirdWaypoint,
-	BankInterests {
-		amount: f64,
-	},
-}
-
-impl Display for Operation {
-	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		match self {
-			Self::PlayerPurse {
-				amount, username, ..
-			} => write!(
-				f,
-				"TSC NEW: {} has {} {} ¤",
-				username,
-				if *amount > 0.0 { "deposit" } else { "withdraw" },
-				amount
-			),
-			Self::PlayerTransfer {
-				amount,
-				receiver,
-				sender,
-				..
-			} => write!(
-				f,
-				"TSF NEW: {sender} has transfered {amount} coins to {receiver}"
-			),
-			Self::WeirdWaypoint => write!(f, "Weirdwaypoint"),
-			Self::BankInterests { amount } => write!(f, "BANK INTEREST: {amount} ¤"),
-		}
-	}
-}
 
 fn load_database(file_path: &str) -> DataFile {
 	let content = fs::read_to_string(file_path).expect("Should have been able to read the file");
@@ -102,14 +35,6 @@ fn write_database(database: &DataFile) {
 	let database_json = serde_json::to_string(&database)
 		.expect("An error occured while parsing Datafile into json");
 	fs::write(DB_FILE, database_json).expect("An error occured while writing into the json file");
-}
-
-fn load_config_from_env() -> Config {
-	Config {
-		hypixel_api_key: var("HYPIXEL_API_KEY").unwrap(),
-		profile_uuid: var("PROFILE_UUID").unwrap(),
-		port: var("PORT").unwrap(),
-	}
 }
 
 fn fetch_api(config: &Config, client: &Client, database: &mut DataFile) -> Profile {
@@ -133,10 +58,7 @@ fn fetch_api(config: &Config, client: &Client, database: &mut DataFile) -> Profi
 		config.profile_uuid
 	);
 
-	database.last_check_timestamp = SystemTime::now()
-		.duration_since(UNIX_EPOCH)
-		.unwrap()
-		.as_millis();
+	database.last_check_timestamp = Local::now().timestamp_millis();
 
 	response.profile
 }
@@ -185,13 +107,7 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 		println!(
 			"TSC: Updated, there are 50 new transactions, maybe some were not correctly registered"
 		);
-		new_transactions.push((
-			SystemTime::now()
-				.duration_since(UNIX_EPOCH)
-				.unwrap()
-				.as_millis(),
-			Operation::WeirdWaypoint,
-		));
+		new_transactions.push((Local::now().timestamp_millis(), Operation::WeirdWaypoint));
 	} else if new_transactions.is_empty() {
 		println!("TSC: Updated, no new transactions");
 	} else {
@@ -258,47 +174,8 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 	database.balance = banking.balance;
 }
 
-pub(crate) fn handle_connection(mut stream: TcpStream, body: &str) {
-	let reader = BufReader::new(&stream);
-	let request_line = reader.lines().next().unwrap().unwrap();
-	let request_path = request_line.split_whitespace().nth(1).unwrap_or("/");
-
-	if request_path.starts_with("/static/") {
-		let file_path = format!(".{request_path}");
-		if let Ok(contents) = fs::read(&file_path) {
-			let content_type = match file_path.rsplit('.').next().unwrap_or("") {
-				"css" => "text/css",
-				"js" => "application/javascript",
-				"png" => "image/png",
-				"jpg" | "jpeg" => "image/jpeg",
-				_ => "application/octet-stream",
-			};
-
-			let response = format!(
-				"HTTP/1.1 200 OK\r\nContent-Type: {}\r\nContent-Length: {}\r\n\r\n",
-				content_type,
-				contents.len()
-			);
-
-			stream.write_all(response.as_bytes()).unwrap();
-			stream.write_all(&contents).unwrap();
-		} else {
-			let response = "HTTP/1.1 404 NOT FOUND\r\n\r\n";
-			stream.write_all(response.as_bytes()).unwrap();
-		}
-	} else {
-		let response = format!(
-            "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: {}\r\n\r\n{}",
-            body.len(),
-            body
-        );
-
-		stream.write_all(response.as_bytes()).unwrap();
-	}
-}
-
 #[expect(clippy::significant_drop_tightening)]
-fn generate_template(database: &Arc<Mutex<DataFile>>) -> String {
+fn generate_template(database: &Arc<Mutex<DataFile>>, config: &Config) -> String {
 	let database = database.lock();
 
 	let mut users = database
@@ -339,6 +216,7 @@ fn generate_template(database: &Arc<Mutex<DataFile>>) -> String {
 		last_transaction_timestamp: database.last_transaction_timestamp,
 		drift: database.drift,
 		total_operations: database.operations.len(),
+		offset: config.offset,
 	};
 
 	template.render().unwrap()
@@ -360,20 +238,26 @@ fn spawn_fetch_thread(config: Config, database: Arc<Mutex<DataFile>>, client: Cl
 }
 
 fn main() {
-	let config = load_config_from_env();
-	let pool = ThreadPool::new(10);
-	let listener = TcpListener::bind(format!("127.0.0.1:{0}", config.port)).unwrap();
+	let config = Config::load();
 	let database = Arc::new(Mutex::new(load_database(DB_FILE)));
 	let client = reqwest::blocking::Client::new();
 
-	spawn_fetch_thread(config, database.clone(), client);
+	spawn_fetch_thread(config.clone(), database.clone(), client);
 
-	for stream in listener.incoming() {
-		let stream = stream.unwrap();
-		let template = generate_template(&database);
+	rouille::start_server("127.0.0.1:7878", move |request| {
+		if let Some(request) = request.remove_prefix("/static") {
+			return rouille::match_assets(&request, "static");
+		}
 
-		pool.execute(move || {
-			handle_connection(stream, &template);
-		});
-	}
+		let response = router!(request,
+			(GET) (/) => {
+				Response::from_data("text/html", generate_template(&database, &config))
+			},
+			(POST) (/) => {
+				Response::empty_404()
+			},
+			_ => Response::empty_404()
+		);
+		response
+	});
 }

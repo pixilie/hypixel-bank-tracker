@@ -1,10 +1,89 @@
 #![allow(dead_code)]
 use askama::Template;
 use chrono::{Local, TimeZone};
+use dotenvy::var;
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fmt::Display};
 
-use crate::Operation;
+// Custom models
+#[derive(Clone)]
+pub(crate) struct Config {
+	pub(crate) hypixel_api_key: String,
+	pub(crate) profile_uuid: String,
+	pub(crate) port: String,
+	pub(crate) offset: i64,
+}
+
+impl Config {
+	pub(crate) fn load() -> Self {
+		Self {
+			hypixel_api_key: var("HYPIXEL_API_KEY").unwrap(),
+			profile_uuid: var("PROFILE_UUID").unwrap(),
+			port: var("PORT").unwrap(),
+			offset: var("TIME_OFFSET").unwrap().parse::<i64>().unwrap(),
+		}
+	}
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+pub(crate) struct DataFile {
+	pub(crate) version: u64,
+	pub(crate) last_transaction_timestamp: i64,
+	pub(crate) last_check_timestamp: i64,
+	pub(crate) balance: f64,
+	pub(crate) drift: f64,
+	pub(crate) max_balance: String,
+	pub(crate) bank_interests: f64,
+	pub(crate) users: HashMap<Username, f64>,
+	pub(crate) operations: Vec<(i64, Operation)>,
+}
+
+#[derive(Debug, Deserialize, Serialize, Clone)]
+#[serde(tag = "type")]
+pub(crate) enum Operation {
+	PlayerPurse {
+		amount: f64,
+		username: Username,
+		repeat_count: u64,
+	},
+	PlayerTransfer {
+		amount: f64,
+		receiver: Username,
+		sender: Username,
+		repeat_count: u64,
+	},
+	WeirdWaypoint,
+	BankInterests {
+		amount: f64,
+	},
+}
+
+impl Display for Operation {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		match self {
+			Self::PlayerPurse {
+				amount, username, ..
+			} => write!(
+				f,
+				"TSC NEW: {} has {} {} ¤",
+				username,
+				if *amount > 0.0 { "deposit" } else { "withdraw" },
+				amount
+			),
+			Self::PlayerTransfer {
+				amount,
+				receiver,
+				sender,
+				..
+			} => write!(
+				f,
+				"TSF NEW: {sender} has transfered {amount} coins to {receiver}"
+			),
+			Self::WeirdWaypoint => write!(f, "Weirdwaypoint"),
+			Self::BankInterests { amount } => write!(f, "BANK INTEREST: {amount} ¤"),
+		}
+	}
+}
 
 #[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Hash, Clone)]
 pub(crate) struct Uuid(String);
@@ -33,16 +112,11 @@ impl Display for Username {
 	}
 }
 
+// Hypixel API related models
 #[derive(Debug, Deserialize, Serialize)]
 pub(crate) struct ProfileResponse {
 	pub(crate) success: bool,
 	pub(crate) profile: Profile,
-}
-
-pub(crate) struct Config {
-	pub(crate) hypixel_api_key: String,
-	pub(crate) profile_uuid: String,
-	pub(crate) port: String,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
@@ -81,7 +155,7 @@ pub(crate) struct Banking {
 #[derive(Debug, Deserialize, Serialize, Clone)]
 pub(crate) struct Transaction {
 	pub(crate) amount: f64,
-	pub(crate) timestamp: u128,
+	pub(crate) timestamp: i64,
 	pub(crate) action: TransactionAction,
 	pub(crate) initiator_name: String,
 }
@@ -103,20 +177,22 @@ pub(crate) struct UserDelta<'a> {
 	pub(crate) delta: f64,
 }
 
+// Askama template related models
 #[derive(Template)]
 #[template(path = "index.html")]
 pub(crate) struct BankerTemplate<'a> {
 	pub(crate) users: Vec<UserBalance<'a>>,
-	pub(crate) operations: &'a [(u128, Operation)],
+	pub(crate) operations: &'a [(i64, Operation)],
 	pub(crate) deltas: Vec<UserDelta<'a>>,
 	pub(crate) bank_interests: f64,
 	pub(crate) balance: f64,
 	pub(crate) max_balance: String,
 	pub(crate) completion_percentage: String,
-	pub(crate) last_check_timestamp: u128,
-	pub(crate) last_transaction_timestamp: u128,
+	pub(crate) last_check_timestamp: i64,
+	pub(crate) last_transaction_timestamp: i64,
 	pub(crate) drift: f64,
 	pub(crate) total_operations: usize,
+	pub(crate) offset: i64,
 }
 
 #[expect(clippy::unused_self, reason = "askama template works with methods")]
@@ -140,12 +216,11 @@ impl BankerTemplate<'_> {
 		spaced_int
 	}
 
-	fn format_timestamp(&self, ts: u128) -> String {
-		if let Ok(secs) = i64::try_from(ts / 1000) {
-			if let Some(datetime) = Local.timestamp_opt(secs, 0).single() {
-				return datetime.format("%H:%M %d/%m").to_string();
-			}
-		}
-		String::from("Invalid timestamp")
+	fn format_timestamp(&self, timestamp: i64) -> String {
+		Local
+			.timestamp_opt((timestamp + self.offset * 3600 * 1000) / 1000, 0)
+			.unwrap()
+			.format("%H:%M %d/%m")
+			.to_string()
 	}
 }
