@@ -61,5 +61,10 @@
             # RUST_LOG = "";
           };
         });
+
+      nixosModules = rec {
+        default = hypixel-bank-tracker;
+        hypixel-bank-tracker = import ./module.nix self;
+      };
     };
 }
