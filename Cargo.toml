@@ -1,13 +1,21 @@
 [package]
 name = "hypixel-bank-tracker"
+description = "Tracker for your Skyblock co-op bank account"
 version = "0.1.0"
 edition = "2021"
+
+# license = ""
+
+authors = [
+  "Kristen Couty <contact@pixilie.net>",
+  "Milo Moisson <milo@wiro.world>"
+]
 
 [dependencies]
 askama = "0.13"
 chrono = "0.4"
 dotenvy = "0.15"
-parking_lot = "0.12.3"
+parking_lot = "0.12"
 reqwest = { version = "0.12", features = ["blocking", "json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
