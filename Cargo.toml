@@ -12,7 +12,7 @@ authors = [
 ]
 
 [dependencies]
-askama = "0.13"
+askama = "0.14"
 chrono = "0.4"
 dotenvy = "0.15"
 parking_lot = "0.12"
