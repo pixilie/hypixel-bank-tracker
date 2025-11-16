@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use askama::{filters::format, Template};
+use askama::Template;
 use core::time;
 use dotenvy::{self, var};
 use helpers::{format_completion_percentage, get_max_balance, process_user_balance_evolution};
@@ -83,7 +83,7 @@ impl Display for Operation {
 				..
 			} => write!(
 				f,
-				"TSF NEW: {sender} has transfered {amount} coins to {receiver}"
+				"TSF NEW: {sender} has transferred {amount} coins to {receiver}"
 			),
 			Self::WeirdWaypoint => write!(f, "Weirdwaypoint"),
 			Self::BankInterests { amount } => write!(f, "BANK INTEREST: {amount} ¤"),
@@ -100,15 +100,16 @@ fn load_database(file_path: &str) -> DataFile {
 
 fn write_database(database: &DataFile) {
 	let database_json = serde_json::to_string(&database)
-		.expect("An error occured while parsing Datafile into json");
-	fs::write(DB_FILE, database_json).expect("An error occured while writing into the json file");
+		.expect("An error occurred while parsing Datafile into json");
+	fs::write(DB_FILE, database_json).expect("An error occurred while writing into the json file");
 }
 
 fn load_config_from_env() -> Config {
 	Config {
-		hypixel_api_key: var("HYPIXEL_API_KEY").unwrap(),
-		profile_uuid: var("PROFILE_UUID").unwrap(),
-		port: var("PORT").unwrap(),
+		hypixel_api_key: var("HYPIXEL_API_KEY")
+			.expect("could not get HYPIXEL_API_KEY from environment"),
+		profile_uuid: var("PROFILE_UUID").expect("could not get PROFILE_UUID from environment"),
+		port: var("PORT").expect("could not get PORT from environment"),
 	}
 }
 
@@ -223,13 +224,13 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 					| !database.users.contains_key(sender)
 					| !database.users.contains_key(receiver)
 				{
-					panic!("An error occured with the users concerned by the transfer");
+					panic!("An error occurred with the users concerned by the transfer");
 				}
 
 				let [Some(sender_balance), Some(receiver_balance)] =
 					database.users.get_disjoint_mut([sender, receiver])
 				else {
-					panic!("An error occured while writing the transfer in the database");
+					panic!("An error occurred while writing the transfer in the database");
 				};
 
 				*sender_balance -= amount;
@@ -264,6 +265,7 @@ pub(crate) fn handle_connection(mut stream: TcpStream, body: &str) {
 	let request_path = request_line.split_whitespace().nth(1).unwrap_or("/");
 
 	if request_path.starts_with("/static/") {
+		// TODO: address path traversal vulnerability as a service
 		let file_path = format!(".{request_path}");
 		if let Ok(contents) = fs::read(&file_path) {
 			let content_type = match file_path.rsplit('.').next().unwrap_or("") {
