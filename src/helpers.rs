@@ -27,10 +27,9 @@ pub(crate) fn get_max_balance(profile: &Profile) -> String {
 				.filter_map(|task| bank_level.get(task.as_str()))
 				.max()
 		})
-		.max()
-		.map(|value| value.to_string());
+		.max();
 
-	max_balance.map_or_else(|| "Unknown".to_string(), |value| value)
+	max_balance.map_or_else(|| "Unknown".to_string(), |value| value.to_string())
 }
 
 pub(crate) fn process_user_balance_evolution(
@@ -70,7 +69,7 @@ pub(crate) fn process_user_balance_evolution(
 
 pub(crate) fn format_completion_percentage(balance: f64, max_balance: &str) -> String {
 	max_balance.parse::<f64>().map_or_else(
-		|_| "Unkwow".to_string(),
+		|_| "Unknown".to_string(),
 		|max_balance| format!("{:.2}%", (balance / max_balance) * 100.0),
 	)
 }

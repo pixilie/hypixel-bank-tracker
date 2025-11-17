@@ -33,8 +33,8 @@ let
         description = ''
           Additional environment file as defined in {manpage}`systemd.exec(5)`.
 
-          Sensitive secrets such as {env}`HYPIXEL_API_KEY`,
-          and {env}`PROFILE_UUID` may be passed to the service
+          Sensitive secrets such as {env}`HBT_HYPIXEL_API_KEY`,
+          and {env}`HBT_PROFILE_UUID` may be passed to the service
           without making them world readable in the nix store.
         '';
       };
@@ -78,7 +78,7 @@ in
         };
 
         environment = {
-          PORT = toString instance.port;
+          HBT_PORT = toString instance.port;
         };
       };
     in

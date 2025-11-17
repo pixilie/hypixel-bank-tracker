@@ -1,28 +1,29 @@
-#![allow(dead_code)]
-
-use askama::Template;
-use core::time;
-use dotenvy::{self, var};
-use helpers::{format_completion_percentage, get_max_balance, process_user_balance_evolution};
-use models::{
-	BankerTemplate, Banking, Config, Profile, ProfileResponse, Transaction, UserBalance, UserDelta,
-	Username,
-};
-use parking_lot::Mutex;
-use pool::ThreadPool;
-use reqwest::blocking::Client;
-use serde::{Deserialize, Serialize};
 use std::{
 	collections::HashMap,
+	env,
 	fmt::Display,
 	fs,
 	io::{BufRead, BufReader, Write},
 	net::{TcpListener, TcpStream},
 	sync::Arc,
 	thread,
-	time::{SystemTime, UNIX_EPOCH},
+	time::{self, SystemTime, UNIX_EPOCH},
 };
+
+use askama::Template;
+use parking_lot::Mutex;
+use pool::ThreadPool;
+use reqwest::blocking::Client;
+use serde::{Deserialize, Serialize};
 use url::Url;
+
+use crate::helpers::{
+	format_completion_percentage, get_max_balance, process_user_balance_evolution,
+};
+use crate::models::{
+	BankerTemplate, Banking, Config, Profile, ProfileResponse, Transaction, UserBalance, UserDelta,
+	Username,
+};
 
 mod helpers;
 mod models;
@@ -104,18 +105,24 @@ fn write_database(database: &DataFile) {
 	fs::write(DB_FILE, database_json).expect("An error occurred while writing into the json file");
 }
 
-fn load_config_from_env() -> Config {
-	Config {
-		hypixel_api_key: var("HYPIXEL_API_KEY")
-			.expect("could not get HYPIXEL_API_KEY from environment"),
-		profile_uuid: var("PROFILE_UUID").expect("could not get PROFILE_UUID from environment"),
-		port: var("PORT").expect("could not get PORT from environment"),
-	}
+fn require_var(name: &str) -> String {
+	env::var(name).unwrap_or_else(|_| panic!("could not get `{name}` from the environment"))
+}
+
+fn load_config_from_env() -> Arc<Config> {
+	Arc::new(Config {
+		hypixel_api_key: require_var("HBT_HYPIXEL_API_KEY"),
+		profile_uuid: require_var("HBT_PROFILE_UUID"),
+		port: require_var("HBT_PORT"),
+		static_folder: env::var("HBT_STATIC_FOLDER")
+			.unwrap_or_else(|_| "./static/".into())
+			.into(),
+	})
 }
 
 fn fetch_api(config: &Config, client: &Client, database: &mut DataFile) -> Profile {
 	println!(
-		"Fetching fresh information for profile {0}",
+		"Fetching fresh information for profile {}",
 		config.profile_uuid
 	);
 
@@ -219,7 +226,7 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 				sender,
 				..
 			} => {
-				//TODO: Transfer with bank interests
+				// TODO: transfer with bank interests
 				if (sender == receiver)
 					| !database.users.contains_key(sender)
 					| !database.users.contains_key(receiver)
@@ -259,20 +266,29 @@ fn update_transaction(profile: &Profile, database: &mut DataFile) {
 	database.balance = banking.balance;
 }
 
-pub(crate) fn handle_connection(mut stream: TcpStream, body: &str) {
+pub(crate) fn handle_connection(
+	mut stream: TcpStream,
+	database: &Mutex<DataFile>,
+	config: &Config,
+) {
 	let reader = BufReader::new(&stream);
 	let request_line = reader.lines().next().unwrap().unwrap();
 	let request_path = request_line.split_whitespace().nth(1).unwrap_or("/");
 
 	if request_path.starts_with("/static/") {
-		// TODO: address path traversal vulnerability as a service
-		let file_path = format!(".{request_path}");
+		assert!(
+			!request_path.contains(".."),
+			"path should not contain a parent component: {request_path:?}"
+		);
+
+		let file_path = config.static_folder.join(request_path);
+
 		if let Ok(contents) = fs::read(&file_path) {
-			let content_type = match file_path.rsplit('.').next().unwrap_or("") {
-				"css" => "text/css",
-				"js" => "application/javascript",
-				"png" => "image/png",
-				"jpg" | "jpeg" => "image/jpeg",
+			let content_type = match file_path.extension().and_then(|ext| ext.to_str()) {
+				Some("css") => "text/css",
+				Some("js") => "application/javascript",
+				Some("png") => "image/png",
+				Some("jpg" | "jpeg") => "image/jpeg",
 				_ => "application/octet-stream",
 			};
 
@@ -289,6 +305,8 @@ pub(crate) fn handle_connection(mut stream: TcpStream, body: &str) {
 			stream.write_all(response.as_bytes()).unwrap();
 		}
 	} else {
+		let body = generate_template(database);
+
 		let response = format!(
             "HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=UTF-8\r\nContent-Length: {}\r\n\r\n{}",
             body.len(),
@@ -300,7 +318,7 @@ pub(crate) fn handle_connection(mut stream: TcpStream, body: &str) {
 }
 
 #[expect(clippy::significant_drop_tightening)]
-fn generate_template(database: &Arc<Mutex<DataFile>>) -> String {
+fn generate_template(database: &Mutex<DataFile>) -> String {
 	let database = database.lock();
 
 	let mut users = database
@@ -347,7 +365,7 @@ fn generate_template(database: &Arc<Mutex<DataFile>>) -> String {
 }
 
 #[expect(clippy::significant_drop_tightening)]
-fn spawn_fetch_thread(config: Config, database: Arc<Mutex<DataFile>>, client: Client) {
+fn spawn_fetch_thread(config: Arc<Config>, database: Arc<Mutex<DataFile>>, client: Client) {
 	thread::spawn(move || loop {
 		{
 			let mut locked_database = database.lock();
@@ -362,20 +380,25 @@ fn spawn_fetch_thread(config: Config, database: Arc<Mutex<DataFile>>, client: Cl
 }
 
 fn main() {
+	// Load config from .env if available, fallback to the environment.
+	let _ = dotenvy::dotenv();
+
 	let config = load_config_from_env();
+	let database = Arc::new(Mutex::new(load_database(DB_FILE)));
+
 	let pool = ThreadPool::new(10);
 	let listener = TcpListener::bind(format!("127.0.0.1:{0}", config.port)).unwrap();
-	let database = Arc::new(Mutex::new(load_database(DB_FILE)));
-	let client = reqwest::blocking::Client::new();
 
-	spawn_fetch_thread(config, database.clone(), client);
+	let client = reqwest::blocking::Client::new();
+	spawn_fetch_thread(Arc::clone(&config), database.clone(), client);
 
 	for stream in listener.incoming() {
 		let stream = stream.unwrap();
-		let template = generate_template(&database);
 
+		let database_handle = Arc::clone(&database);
+		let config_handle = Arc::clone(&config);
 		pool.execute(move || {
-			handle_connection(stream, &template);
+			handle_connection(stream, &database_handle, &config_handle);
 		});
 	}
 }
