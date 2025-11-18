@@ -3,8 +3,9 @@
 , rustPlatform
 , gitignore
 
-, pkg-config
+, makeWrapper
 , openssl
+, pkg-config
 }:
 
 let
@@ -23,10 +24,22 @@ rustPlatform.buildRustPackage {
 
   nativeBuildInputs = [
     pkg-config
+    makeWrapper
   ];
+
   buildInputs = [
     openssl
   ];
+
+  postInstall = ''
+    # Copy static assets
+    install -Dm755 -d "$out/share/hypixel-bank-tracker/static"
+    cp -r "${src}/static/"* "$out/share/hypixel-bank-tracker/static/"
+
+    # Wrap the program so it sees the static files
+    wrapProgram "$out/bin/hypixel-bank-tracker" \
+      --set HBT_STATIC_FILES "$out/share/hypixel-bank-tracker/static"
+  '';
 
   meta = {
     inherit (cargoTOML.package)

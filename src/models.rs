@@ -1,8 +1,8 @@
-#![allow(dead_code)]
+use std::{collections::HashMap, fmt::Display, path::PathBuf};
+
 use askama::Template;
 use chrono::{Local, TimeZone};
 use serde::{Deserialize, Serialize};
-use std::{collections::HashMap, fmt::Display};
 
 use crate::Operation;
 
@@ -20,10 +20,6 @@ impl Username {
 		} else {
 			Self(username)
 		}
-	}
-
-	pub(crate) fn as_str(&self) -> &str {
-		&self.0
 	}
 }
 
@@ -43,6 +39,7 @@ pub(crate) struct Config {
 	pub(crate) hypixel_api_key: String,
 	pub(crate) profile_uuid: String,
 	pub(crate) port: String,
+	pub(crate) static_folder: PathBuf,
 }
 
 #[derive(Debug, Deserialize, Serialize, Clone)]
