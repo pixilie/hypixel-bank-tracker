@@ -38,7 +38,7 @@ rustPlatform.buildRustPackage {
 
     # Wrap the program so it sees the static files
     wrapProgram "$out/bin/hypixel-bank-tracker" \
-      --set HBT_STATIC_FILES "$out/share/hypixel-bank-tracker/static"
+      --set HBT_STATIC_FOLDER "$out/share/hypixel-bank-tracker/static"
   '';
 
   meta = {
