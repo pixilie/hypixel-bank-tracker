@@ -275,13 +275,13 @@ pub(crate) fn handle_connection(
 	let request_line = reader.lines().next().unwrap().unwrap();
 	let request_path = request_line.split_whitespace().nth(1).unwrap_or("/");
 
-	if request_path.starts_with("/static/") {
+	if let Some(static_path) = request_path.strip_prefix("/static/") {
 		assert!(
-			!request_path.contains(".."),
-			"path should not contain a parent component: {request_path:?}"
+			!static_path.contains(".."),
+			"static path should not contain a parent component: {static_path:?}"
 		);
 
-		let file_path = config.static_folder.join(request_path);
+		let file_path = config.static_folder.join(static_path);
 
 		if let Ok(contents) = fs::read(&file_path) {
 			let content_type = match file_path.extension().and_then(|ext| ext.to_str()) {
