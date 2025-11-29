@@ -9,6 +9,8 @@ self:
 with lib;
 
 let
+  inherit (pkgs.stdenv.hostPlatform) system;
+
   cfg = config.services.hypixel-bank-tracker;
 
   options = { name, ... }: {
@@ -20,7 +22,7 @@ let
         default = name;
       };
 
-      package = mkPackageOption self.packages.${pkgs.system} "hypixel-bank-tracker" { };
+      package = mkPackageOption self.packages.${system} "hypixel-bank-tracker" { };
 
       port = mkOption {
         type = types.port;
