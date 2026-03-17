@@ -1,7 +1,5 @@
-use std::{
-	collections::HashMap,
-	time::{SystemTime, UNIX_EPOCH},
-};
+use chrono::Local;
+use std::collections::HashMap;
 
 use crate::{models::Profile, Operation, Username};
 
@@ -27,18 +25,16 @@ pub(crate) fn get_max_balance(profile: &Profile) -> String {
 				.filter_map(|task| bank_level.get(task.as_str()))
 				.max()
 		})
-		.max();
+		.max()
+		.map(std::string::ToString::to_string);
 
 	max_balance.map_or_else(|| "Unknown".to_string(), |value| value.to_string())
 }
 
 pub(crate) fn process_user_balance_evolution(
-	operations: &[(u128, Operation)],
+	operations: &[(i64, Operation)],
 ) -> HashMap<&Username, f64> {
-	let current = SystemTime::now()
-		.duration_since(UNIX_EPOCH)
-		.unwrap()
-		.as_millis();
+	let current = Local::now().timestamp_millis();
 
 	let recent_transactions = operations
 		.iter()
