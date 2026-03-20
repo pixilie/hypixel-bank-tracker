@@ -10,7 +10,7 @@ use models::{
 };
 use parking_lot::Mutex;
 use reqwest::blocking::Client;
-use rouille::{router, Response};
+use rouille::{router, try_or_400, websocket, Response};
 use std::{
 	fs::{self},
 	sync::Arc,
@@ -242,7 +242,7 @@ fn main() {
 	let database = Arc::new(Mutex::new(load_database(DB_FILE)));
 	let client = reqwest::blocking::Client::new();
 
-	spawn_fetch_thread(config.clone().into(), database.clone(), client);
+	spawn_fetch_thread(config.clone().into(), database.clone(), client.clone());
 
 	rouille::start_server("127.0.0.1:7878", move |request| {
 		if let Some(request) = request.remove_prefix("/static") {
@@ -252,6 +252,35 @@ fn main() {
 		let response = router!(request,
 			(GET) (/) => {
 				Response::from_data("text/html", generate_template(&database, &config))
+			},
+			(GET) (/ws) => {
+				let (response, websocket) = try_or_400!(websocket::start(request, None::<&str>));
+
+				let thread_config = config.clone();
+				let thread_database = database.clone();
+				let thread_client = client.clone();
+
+				thread::spawn(move || {
+					let mut ws = websocket.recv().unwrap();
+
+					 while let Some(message) = ws.next() {
+						match message {
+							websocket::Message::Text(txt) => {
+								match txt.as_str() {
+									"reload" => {
+										spawn_fetch_thread(thread_config.clone().into(), thread_database.clone(), thread_client.clone());
+										ws.send_text("reload").unwrap();
+									}
+									_ => { println!("Unkown websocket message") }
+								}
+							}
+
+							_ => { println!("Unkown websocket message") }
+						}
+					}
+					});
+
+				response
 			},
 			(POST) (/) => {
 				Response::empty_404()
