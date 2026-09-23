@@ -54,7 +54,7 @@ fn fetch_api(config: &Config, client: &Client, database: &mut DataFile) -> Profi
 	};
 
 	println!(
-		"Got fresh information for profile {:?}, reloadind clients",
+		"Got fresh information for profile {:?}, reloading clients",
 		config.profile_uuid
 	);
 
