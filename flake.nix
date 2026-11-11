@@ -1,66 +1,64 @@
 {
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-25.11";
+    nixpkgs.url = "https://channels.nixos.org/nixos-unstable/nixexprs.tar.xz";
 
     rust-overlay.url = "github:oxalica/rust-overlay";
     rust-overlay.inputs.nixpkgs.follows = "nixpkgs";
-
-    gitignore.url = "github:hercules-ci/gitignore.nix";
-    gitignore.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = { self, nixpkgs, rust-overlay, gitignore }:
+  outputs =
+    {
+      self,
+      nixpkgs,
+      rust-overlay,
+    }:
     let
-      inherit (nixpkgs.lib) genAttrs getExe;
+      inherit (nixpkgs.lib) genAttrs;
 
-      forAllSystems = genAttrs [ "x86_64-linux" "aarch64-linux" "aarch64-darwin" ];
+      forAllSystems = genAttrs [
+        "x86_64-linux"
+        "aarch64-linux"
+        "aarch64-darwin"
+      ];
       forAllPkgs = function: forAllSystems (system: function pkgs.${system});
 
-      mkApp = (program: { type = "app"; inherit program; });
-
-      pkgs = forAllSystems (system: (import nixpkgs {
-        inherit system;
-        overlays = [ (import rust-overlay) ];
-      }));
+      pkgs = forAllSystems (
+        system:
+        (import nixpkgs {
+          inherit system;
+          overlays = [ (import rust-overlay) ];
+        })
+      );
     in
     {
-      formatter = forAllPkgs (pkgs: pkgs.nixpkgs-fmt);
+      formatter = forAllPkgs (pkgs: pkgs.nixfmt-tree);
 
       packages = forAllPkgs (pkgs: rec {
         default = hypixel-bank-tracker;
-        hypixel-bank-tracker = pkgs.callPackage ./package.nix { inherit gitignore; };
-      });
-      apps = forAllSystems (system: rec {
-        default = hypixel-bank-tracker;
-        hypixel-bank-tracker = mkApp (getExe self.packages.${system}.app);
+        hypixel-bank-tracker = pkgs.callPackage ./package.nix { };
       });
 
-      devShells = forAllPkgs (pkgs:
+      devShells = forAllPkgs (
+        pkgs:
         with pkgs.lib;
         let
           file-rust-toolchain = pkgs.rust-bin.fromRustupToolchainFile ./rust-toolchain.toml;
-          rust-toolchain = file-rust-toolchain.override { extensions = [ "rust-analyzer" ]; };
+          rust-toolchain = file-rust-toolchain.override { extensions = [ "rust-src"  "rust-analyzer" ]; };
         in
         {
-          default = pkgs.mkShell rec {
-            nativeBuildInputs = with pkgs; [
+          default = pkgs.mkShell {
+            packages = with pkgs; [
               pkg-config
               rust-toolchain
               act
 
               cargo-expand
-            ];
 
-            buildInputs = with pkgs; [
               openssl
             ];
-
-            RUST_SRC_PATH = pkgs.rustPlatform.rustLibSrc;
-            LD_LIBRARY_PATH = makeLibraryPath buildInputs;
-
-            # RUST_LOG = "";
           };
-        });
+        }
+      );
 
       nixosModules = rec {
         default = hypixel-bank-tracker;

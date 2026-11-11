@@ -1,17 +1,14 @@
-{ lib
+{
+  lib,
+  rustPlatform,
 
-, rustPlatform
-, gitignore
-
-, makeWrapper
-, openssl
-, pkg-config
+  makeWrapper,
+  openssl,
+  pkg-config,
 }:
 
 let
-  inherit (gitignore.lib) gitignoreSource;
-
-  src = gitignoreSource ./.;
+  src = ./.;
   cargoTOML = lib.importTOML "${src}/Cargo.toml";
 in
 rustPlatform.buildRustPackage {
@@ -20,7 +17,9 @@ rustPlatform.buildRustPackage {
 
   inherit src;
 
-  cargoLock = { lockFile = "${src}/Cargo.lock"; };
+  cargoLock = {
+    lockFile = "${src}/Cargo.lock";
+  };
 
   nativeBuildInputs = [
     pkg-config

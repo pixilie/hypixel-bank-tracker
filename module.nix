@@ -1,9 +1,10 @@
 self:
 
-{ config
-, lib
-, pkgs
-, ...
+{
+  config,
+  lib,
+  pkgs,
+  ...
 }:
 
 with lib;
@@ -86,11 +87,12 @@ in
     in
     {
       systemd.services = lib.mkMerge (
-        map
-          (instance: lib.mkIf instance.enable {
+        map (
+          instance:
+          lib.mkIf instance.enable {
             "hypixel-bank-tracker-${instance.name}" = mkInstanceServiceConfig instance;
-          })
-          (lib.attrValues cfg.instances)
+          }
+        ) (lib.attrValues cfg.instances)
       );
     };
 }
