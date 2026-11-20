@@ -17,10 +17,15 @@ pub(crate) struct Config {
 impl Config {
 	pub(crate) fn load() -> Self {
 		Self {
-			hypixel_api_key: var("HYPIXEL_API_KEY").unwrap(),
-			profile_uuid: var("PROFILE_UUID").unwrap(),
-			port: var("PORT").unwrap(),
-			offset: var("TIME_OFFSET").unwrap().parse::<i64>().unwrap(),
+			hypixel_api_key: var("HYPIXEL_API_KEY")
+				.expect("No API key found in configuration file"),
+			profile_uuid: var("PROFILE_UUID")
+				.expect("No profilr UUID found in the configuration file"),
+			port: var("PORT").expect("No port found in configuration file"),
+			offset: var("TIME_OFFSET")
+				.expect("No time offset found in configuration file")
+				.parse::<i64>()
+				.expect("An error occured while parsing offset to i64"),
 		}
 	}
 }

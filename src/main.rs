@@ -9,7 +9,7 @@ use models::{
 	UserBalance, UserDelta, Username,
 };
 use parking_lot::Mutex;
-use reqwest::blocking::Client;
+use reqwest::{blocking::Client, Error};
 use rouille::{router, try_or_400, websocket, Response};
 use std::{
 	fs::{self},
@@ -28,7 +28,7 @@ fn load_database(file_path: &str) -> DataFile {
 	let content = fs::read_to_string(file_path).expect("Should have been able to read the file");
 	let database = serde_json::from_str::<DataFile>(content.as_str());
 
-	database.unwrap()
+	database.expect("An error occured while loading the Datafile")
 }
 
 fn write_database(database: &DataFile) {
@@ -37,30 +37,27 @@ fn write_database(database: &DataFile) {
 	fs::write(DB_FILE, database_json).expect("An error occurred while writing into the json file");
 }
 
-fn fetch_api(config: &Config, client: &Client, database: &mut DataFile) -> Profile {
+fn fetch_api(config: &Config, client: &Client) -> Result<Profile, Error> {
 	println!(
 		"Fetching fresh information for profile {}",
 		config.profile_uuid
 	);
 
-	let mut url = Url::parse("https://api.hypixel.net/v2/skyblock/profile").unwrap();
+	let mut url = Url::parse("https://api.hypixel.net/v2/skyblock/profile")
+		.expect("An error occured while parsing the api url");
+
 	url.query_pairs_mut()
 		.append_pair("profile", &config.profile_uuid)
 		.append_pair("key", &config.hypixel_api_key);
 
-	let response = match client.get(url).send() {
-		Ok(response) => response.json::<ProfileResponse>().unwrap(),
-		Err(err) => panic!("There was an error while fetching Hypixel's API: {err}"),
-	};
+	let response = client.get(url).send()?.json::<ProfileResponse>()?;
 
 	println!(
 		"Got fresh information for profile {:?}, reloading clients",
 		config.profile_uuid
 	);
 
-	database.last_check_timestamp = Local::now().timestamp_millis();
-
-	response.profile
+	Ok(response.profile)
 }
 
 fn update_transaction(profile: &Profile, database: &mut DataFile) {
@@ -219,22 +216,79 @@ fn generate_template(database: &Arc<Mutex<DataFile>>, config: &Config) -> String
 		offset: config.offset,
 	};
 
-	template.render().unwrap()
+	template.render().expect("Failed to render the template")
 }
 
 #[expect(clippy::significant_drop_tightening)]
+fn refresh_profile(
+	config: &Config,
+	database: &Mutex<DataFile>,
+	client: &Client,
+) -> Result<(), reqwest::Error> {
+	let new_profile = fetch_api(config, client)?;
+	let mut locked_database = database.lock();
+
+	locked_database.last_check_timestamp = Local::now().timestamp_millis();
+
+	update_transaction(&new_profile, &mut locked_database);
+	write_database(&locked_database);
+
+	Ok(())
+}
+
 fn spawn_fetch_thread(config: Arc<Config>, database: Arc<Mutex<DataFile>>, client: Client) {
 	thread::spawn(move || loop {
-		{
-			let mut locked_database = database.lock();
-			let new_profile = fetch_api(&config, &client, &mut locked_database);
-
-			update_transaction(&new_profile, &mut locked_database);
-			write_database(&locked_database);
+		if let Err(err) = refresh_profile(&config, &database, &client) {
+			eprintln!("Failed to fetch: {err}");
 		}
 
 		thread::sleep(time::Duration::from_secs(600));
 	});
+}
+
+fn handle_websocket(
+	request: &rouille::Request,
+	config: &Config,
+	database: &Arc<Mutex<DataFile>>,
+	client: &Client,
+) -> Response {
+	let (response, websocket) = try_or_400!(websocket::start(request, None::<&str>));
+
+	let thread_config = config.clone();
+	let thread_database = database.clone();
+	let thread_client = client.clone();
+
+	thread::spawn(move || {
+		let Ok(mut ws) = websocket.recv() else {
+			eprintln!("An error occurred while receiving the ws connection");
+			return;
+		};
+
+		while let Some(message) = ws.next() {
+			match message {
+				websocket::Message::Text(txt) => match txt.as_str() {
+					"reload" => {
+						if let Err(err) =
+							refresh_profile(&thread_config, &thread_database, &thread_client)
+						{
+							eprintln!("An error occurred while refreshing profile: {err}");
+							continue;
+						}
+
+						if ws.send_text("reload").is_err() {
+							eprintln!("An error occurred while sending reload to client");
+							break;
+						}
+					}
+					_ => println!("Unknown websocket message"),
+				},
+
+				websocket::Message::Binary(_) => println!("Unknown websocket message"),
+			}
+		}
+	});
+
+	response
 }
 
 fn main() {
@@ -249,44 +303,11 @@ fn main() {
 			return rouille::match_assets(&request, "static");
 		}
 
-		let response = router!(request,
-			(GET) (/) => {
-				Response::from_data("text/html", generate_template(&database, &config))
-			},
-			(GET) (/ws) => {
-				let (response, websocket) = try_or_400!(websocket::start(request, None::<&str>));
-
-				let thread_config = config.clone();
-				let thread_database = database.clone();
-				let thread_client = client.clone();
-
-				thread::spawn(move || {
-					let mut ws = websocket.recv().unwrap();
-
-					 while let Some(message) = ws.next() {
-						match message {
-							websocket::Message::Text(txt) => {
-								match txt.as_str() {
-									"reload" => {
-										spawn_fetch_thread(thread_config.clone().into(), thread_database.clone(), thread_client.clone());
-										ws.send_text("reload").unwrap();
-									}
-									_ => { println!("Unkown websocket message") }
-								}
-							}
-
-							_ => { println!("Unkown websocket message") }
-						}
-					}
-					});
-
-				response
-			},
-			(POST) (/) => {
-				Response::empty_404()
-			},
+		router!(request,
+			(GET) (/) => { Response::from_data("text/html", generate_template(&database, &config)) },
+			(GET) (/ws) => { handle_websocket(request, &config, &database, &client) },
+			(POST) (/) => { Response::empty_404() },
 			_ => Response::empty_404()
-		);
-		response
+		)
 	});
 }
