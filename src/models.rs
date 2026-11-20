@@ -5,7 +5,6 @@ use chrono::{Local, TimeZone};
 use dotenvy::var;
 use serde::{Deserialize, Serialize};
 
-// Custom models
 #[derive(Clone)]
 pub(crate) struct Config {
 	pub(crate) hypixel_api_key: String,
@@ -20,12 +19,12 @@ impl Config {
 			hypixel_api_key: var("HYPIXEL_API_KEY")
 				.expect("No API key found in configuration file"),
 			profile_uuid: var("PROFILE_UUID")
-				.expect("No profilr UUID found in the configuration file"),
+				.expect("No profile UUID found in the configuration file"),
 			port: var("PORT").expect("No port found in configuration file"),
 			offset: var("TIME_OFFSET")
 				.expect("No time offset found in configuration file")
 				.parse::<i64>()
-				.expect("An error occured while parsing offset to i64"),
+				.expect("An error occurred while parsing offset to i64"),
 		}
 	}
 }

@@ -28,7 +28,7 @@ fn load_database(file_path: &str) -> DataFile {
 	let content = fs::read_to_string(file_path).expect("Should have been able to read the file");
 	let database = serde_json::from_str::<DataFile>(content.as_str());
 
-	database.expect("An error occured while loading the Datafile")
+	database.expect("An error occurred while loading the Datafile")
 }
 
 fn write_database(database: &DataFile) {
@@ -44,7 +44,7 @@ fn fetch_api(config: &Config, client: &Client) -> Result<Profile, Error> {
 	);
 
 	let mut url = Url::parse("https://api.hypixel.net/v2/skyblock/profile")
-		.expect("An error occured while parsing the api url");
+		.expect("An error occurred while parsing the api url");
 
 	url.query_pairs_mut()
 		.append_pair("profile", &config.profile_uuid)
