@@ -302,7 +302,7 @@ fn main() {
 	let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), config.port);
 	rouille::start_server(addr, move |request| {
 		if let Some(request) = request.remove_prefix("/static") {
-			return rouille::match_assets(&request, "static");
+			return rouille::match_assets(&request, &config.static_folder);
 		}
 
 		router!(request,

@@ -12,6 +12,7 @@ pub(crate) struct Config {
 	pub(crate) port: u16,
 	/// Offset (in hours) to apply to timestamps compared to machine time
 	pub(crate) offset: i64,
+	pub(crate) static_folder: String,
 }
 
 impl Config {
@@ -29,6 +30,7 @@ impl Config {
 				.expect("No time offset found in configuration file")
 				.parse::<i64>()
 				.expect("An error occurred while parsing offset to i64"),
+			static_folder: var("HBT_STATIC_FOLDER").expect("No static folder given"),
 		}
 	}
 }
