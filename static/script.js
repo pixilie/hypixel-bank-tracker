@@ -13,7 +13,7 @@ if (!websocketInfoStatus) throw new Error("could not select websocket info statu
 
 // ———
 
-let ws = new WebSocket(`ws://${window.location.host}/ws`);
+let ws = new WebSocket(`${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}/ws`);
 
 ws.addEventListener("open", _ => {
     console.info("[RELOAD] Connected");
