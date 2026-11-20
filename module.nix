@@ -29,6 +29,14 @@ let
         type = types.port;
       };
 
+      timeOffset = mkOption {
+        type = types.number;
+        default = 0;
+        description = ''
+          Offset (in hours) to apply to timestamps compared to machine time.
+        '';
+      };
+
       environmentFile = mkOption {
         type = types.nullOr types.path;
         default = null;
@@ -81,7 +89,8 @@ in
         };
 
         environment = {
-          HBT_PORT = toString instance.port;
+          PORT = toString instance.port;
+          TIME_OFFSET = toString instance.timeOffset;
         };
       };
     in

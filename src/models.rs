@@ -10,6 +10,7 @@ pub(crate) struct Config {
 	pub(crate) hypixel_api_key: String,
 	pub(crate) profile_uuid: String,
 	pub(crate) port: String,
+	/// Offset (in hours) to apply to timestamps compared to machine time
 	pub(crate) offset: i64,
 }
 

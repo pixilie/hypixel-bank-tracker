@@ -28,7 +28,7 @@ pub(crate) fn get_max_balance(profile: &Profile) -> String {
 		.max()
 		.map(std::string::ToString::to_string);
 
-	max_balance.map_or_else(|| "Unknown".to_string(), |value| value.to_string())
+	max_balance.unwrap_or_else(|| "Unknown".to_string())
 }
 
 pub(crate) fn process_user_balance_evolution(
