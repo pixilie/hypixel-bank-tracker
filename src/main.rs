@@ -13,6 +13,7 @@ use reqwest::{blocking::Client, Error};
 use rouille::{router, try_or_400, websocket, Response};
 use std::{
 	fs::{self},
+	net::{Ipv4Addr, SocketAddr},
 	sync::Arc,
 	thread,
 };
@@ -298,7 +299,8 @@ fn main() {
 
 	spawn_fetch_thread(config.clone().into(), database.clone(), client.clone());
 
-	rouille::start_server("127.0.0.1:7878", move |request| {
+	let addr = SocketAddr::new(Ipv4Addr::LOCALHOST.into(), config.port);
+	rouille::start_server(addr, move |request| {
 		if let Some(request) = request.remove_prefix("/static") {
 			return rouille::match_assets(&request, "static");
 		}

@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 pub(crate) struct Config {
 	pub(crate) hypixel_api_key: String,
 	pub(crate) profile_uuid: String,
-	pub(crate) port: String,
+	pub(crate) port: u16,
 	/// Offset (in hours) to apply to timestamps compared to machine time
 	pub(crate) offset: i64,
 }
@@ -21,7 +21,10 @@ impl Config {
 				.expect("No API key found in configuration file"),
 			profile_uuid: var("PROFILE_UUID")
 				.expect("No profile UUID found in the configuration file"),
-			port: var("PORT").expect("No port found in configuration file"),
+			port: var("PORT")
+				.expect("No port found in configuration file")
+				.parse()
+				.expect("Given port is invalid"),
 			offset: var("TIME_OFFSET")
 				.expect("No time offset found in configuration file")
 				.parse::<i64>()
