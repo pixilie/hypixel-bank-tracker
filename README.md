@@ -8,9 +8,10 @@ The following environment variable are read.
 
 - `HBT_PROFILE_UUID`: the uuid of a skyblock coop profile
 
-- `HBT_PORT`: the port on which the HTTP server is 
+- `HBT_PORT`: the port on which the HTTP server is
 
   note: the server only binds to `127.0.0.1`, use a reverse proxy to expose the service
 
-- `HBT_STATIC_FOLDER`: the folder where all the static files are expected
+- `HBT_TIME_OFFSET`: offset (in hours) to apply to timestamps compared to machine time
 
+- `HBT_STATIC_FOLDER`: the folder where all the static files are expected

@@ -89,8 +89,8 @@ in
         };
 
         environment = {
-          PORT = toString instance.port;
-          TIME_OFFSET = toString instance.timeOffset;
+          HBT_PORT = toString instance.port;
+          HBT_TIME_OFFSET = toString instance.timeOffset;
         };
       };
     in

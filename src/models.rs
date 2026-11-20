@@ -17,15 +17,15 @@ pub(crate) struct Config {
 impl Config {
 	pub(crate) fn load() -> Self {
 		Self {
-			hypixel_api_key: var("HYPIXEL_API_KEY")
+			hypixel_api_key: var("HBT_HYPIXEL_API_KEY")
 				.expect("No API key found in configuration file"),
-			profile_uuid: var("PROFILE_UUID")
+			profile_uuid: var("HBT_PROFILE_UUID")
 				.expect("No profile UUID found in the configuration file"),
-			port: var("PORT")
+			port: var("HBT_PORT")
 				.expect("No port found in configuration file")
 				.parse()
 				.expect("Given port is invalid"),
-			offset: var("TIME_OFFSET")
+			offset: var("HBT_TIME_OFFSET")
 				.expect("No time offset found in configuration file")
 				.parse::<i64>()
 				.expect("An error occurred while parsing offset to i64"),
@@ -85,7 +85,7 @@ impl Display for Operation {
 				..
 			} => write!(
 				f,
-				"TSF NEW: {sender} has transfered {amount} coins to {receiver}"
+				"TSF NEW: {sender} has transferred {amount} coins to {receiver}"
 			),
 			Self::WeirdWaypoint => write!(f, "Weirdwaypoint"),
 			Self::BankInterests { amount } => write!(f, "BANK INTEREST: {amount} ¤"),
