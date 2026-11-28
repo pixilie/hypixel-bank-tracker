@@ -47,14 +47,10 @@
         in
         {
           default = pkgs.mkShell {
+            inputsFrom = [ self.packages.${pkgs.stdenv.hostPlatform.system}.hypixel-bank-tracker ];
             packages = with pkgs; [
-              pkg-config
               rust-toolchain
-              act
-
               cargo-expand
-
-              openssl
             ];
           };
         }

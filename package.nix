@@ -4,6 +4,7 @@
 
   makeWrapper,
   openssl,
+  aws-lc,
   pkg-config,
 }:
 
@@ -28,6 +29,7 @@ rustPlatform.buildRustPackage {
 
   buildInputs = [
     openssl
+    aws-lc
   ];
 
   postInstall = ''
